@@ -175,7 +175,8 @@ export function senderIdentity(env, dealership, profile) {
 
 /** Customer replies go back to the dealership: tracked alias when inbound email is set up, else the dealership's inbox. */
 export function replyAddress(env, dealership, profile, { customer, staff } = {}) {
-  if (env.INBOUND_EMAIL_DOMAIN && profile && profile.email_inbound_alias) {
+  // Only once inbound routing is live (worker deployed + shared secret set); otherwise replies would bounce.
+  if (env.INBOUND_EMAIL_DOMAIN && env.INBOUND_EMAIL_SECRET && profile && profile.email_inbound_alias) {
     return `${profile.email_inbound_alias}${customer ? '+' + customer.id.slice(0, 8) : ''}@${env.INBOUND_EMAIL_DOMAIN}`;
   }
   return (staff && staff.email) || (profile && profile.email_reply_to) || dealership.email || null;
