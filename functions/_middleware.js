@@ -18,7 +18,7 @@ export async function onRequest(context) {
   let html = await res.text();
   const config = {
     supabaseUrl: env.SUPABASE_URL || '',
-    supabaseAnonKey: env.SUPABASE_ANON_KEY || '',
+    supabaseAnonKey: String(env.SUPABASE_ANON_KEY || '').trim(),
     dealer,
     rootDomain: env.ROOT_DOMAIN || 'aiautoengine.com',
   };
