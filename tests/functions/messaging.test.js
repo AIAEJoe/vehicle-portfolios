@@ -410,6 +410,11 @@ test('Resend webhook: delivered, then spam complaint opts the customer out', asy
   };
   await post('email.delivered');
   assert.equal(fake.db.messages[0].status, 'delivered');
+  await post('email.opened');
+  await post('email.opened');
+  assert.ok(fake.db.messages[0].opened_at);
+  assert.equal(fake.db.messages[0].open_count, 2);
+  assert.equal(fake.db.messages[0].status, 'delivered', 'an open does not change delivery status');
   await post('email.complained');
   assert.equal(fake.db.messages[0].status, 'complained');
   assert.equal(fake.db.customers[0].email_opted_out, true);

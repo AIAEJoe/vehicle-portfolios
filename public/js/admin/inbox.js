@@ -94,7 +94,7 @@ export default async function inbox(el) {
       <div class="bubbles" id="bubbles">
         ${timeline.length ? timeline.map(({ m, r }) => r
           ? html`<div class="bubble sys">${r.action === 'opt_in' ? '✔' : '⛔'} ${r.channel === 'sms' ? 'Text' : 'Email'} ${r.action === 'opt_in' ? 'permission' : 'opt-out'} · ${methodLabel(r)} · ${dateTime(r.created_at)}</div>`
-          : html`<div class="bubble ${m.direction === 'inbound' ? 'in' : 'out'} ${['failed', 'undelivered', 'bounced', 'complained'].includes(m.status) ? 'failed' : ''}">${m.channel === 'email' ? html`<strong>✉ ${m.subject || '(no subject)'}</strong>\n` : ''}${m.body || (m.num_media ? '[photo]' : '')}<span class="meta">${dateTime(m.created_at)} ${m.direction === 'outbound' ? STATUS_ICON[m.status] || m.status : ''}${m.error_message ? ` · ${m.error_message}` : ''}</span></div>`)
+          : html`<div class="bubble ${m.direction === 'inbound' ? 'in' : 'out'} ${['failed', 'undelivered', 'bounced', 'complained'].includes(m.status) ? 'failed' : ''}">${m.channel === 'email' ? html`<strong>✉ ${m.subject || '(no subject)'}</strong>\n` : ''}${m.body || (m.num_media ? '[photo]' : '')}<span class="meta">${dateTime(m.created_at)} ${m.direction === 'outbound' ? STATUS_ICON[m.status] || m.status : ''}${m.channel === 'email' && m.direction === 'outbound' && m.opened_at ? ` · Email opened ${dateTime(m.opened_at)}${m.open_count > 1 ? ` (${m.open_count}×)` : ''}` : ''}${m.error_message ? ` · ${m.error_message}` : ''}</span></div>`)
           : html`<p class="sub">No messages yet.</p>`}
       </div>
       <form class="composer" id="compose">

@@ -1311,3 +1311,8 @@ select v.id, v.dealership_id, format('/seed/jeep-%s.jpg', lpad(n::text, 2, '0'))
 from public.vehicles v cross join generate_series(1, 32) n
 where v.vin = '1C4GJXAG5JW150863'
   and not exists (select 1 from public.vehicle_photos p where p.vehicle_id = v.id);
+
+-- Email open tracking (Resend "email.opened" events). Informational only: Apple Mail
+-- privacy protection pre-loads images, so an "open" doesn't prove the customer read it.
+alter table public.messages add column if not exists opened_at timestamptz;
+alter table public.messages add column if not exists open_count int not null default 0;

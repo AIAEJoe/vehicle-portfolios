@@ -18,6 +18,15 @@ export const onRequestPost = handle(async ({ request, env }) => {
   const evt = JSON.parse(body);
   const status = MAP[evt.type];
   const emailId = evt.data && evt.data.email_id;
+  if (evt.type === 'email.opened' && emailId) {
+    // Shown in the Inbox only — never alerts staff (Apple Mail pre-loads the tracking pixel).
+    const [o] = await sb(env, `/rest/v1/messages?provider_message_id=eq.${enc(emailId)}&select=id,opened_at,open_count`);
+    if (!o) return json({ ok: true, unknown: true });
+    await sb(env, `/rest/v1/messages?id=eq.${o.id}`, { method: 'PATCH', body: {
+      opened_at: o.opened_at || evt.created_at || new Date().toISOString(), open_count: (o.open_count || 0) + 1,
+    } });
+    return json({ ok: true });
+  }
   if (!status || !emailId) return json({ ok: true, ignored: evt.type });
   const [m] = await sb(env, `/rest/v1/messages?provider_message_id=eq.${enc(emailId)}&select=id,status,dealership_id,customer_id,audience`);
   if (!m) return json({ ok: true, unknown: true });
