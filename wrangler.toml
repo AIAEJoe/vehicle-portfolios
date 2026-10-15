@@ -1,0 +1,18 @@
+# Cloudflare Pages project for Vehicle Portfolios.
+# Deploy: npx wrangler pages deploy   (or connect the Git repo in the Cloudflare dashboard)
+name = "vehicle-portfolios"
+pages_build_output_dir = "public"
+compatibility_date = "2024-09-23"
+
+[vars]
+ROOT_DOMAIN = "aiautoengine.com"
+DEFAULT_DEALER = "nsbchevy"
+PLATFORM_EMAIL_DOMAIN = "mail.aiautoengine.com"
+INBOUND_EMAIL_DOMAIN = "reply.aiautoengine.com"
+
+# Secrets (set with `npx wrangler pages secret put NAME` or in the dashboard):
+#   See .dev.vars.example for the full list:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, ENCRYPTION_KEY,
+#   CRON_SECRET, RESEND_API_KEY,
+#   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PRIMARY_CUSTOMER_PROFILE_SID, TWILIO_PLATFORM_MESSAGING_SERVICE_SID,
+#   RESEND_WEBHOOK_SECRET, PLATFORM_EMAIL_DOMAIN, INBOUND_EMAIL_DOMAIN, INBOUND_EMAIL_SECRET, WEBHOOK_BASE_URL

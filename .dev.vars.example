@@ -1,0 +1,24 @@
+# Copy to .dev.vars for `npm run dev` (never commit .dev.vars). Set the same names as
+# Cloudflare Pages secrets for production.
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+CRON_SECRET=long-random-string
+# 32 random bytes, base64:  openssl rand -base64 32
+ENCRYPTION_KEY=
+
+# Twilio parent (ISV) account — dealership subaccounts are created under it
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=
+TWILIO_PRIMARY_CUSTOMER_PROFILE_SID=BU...      # your approved Primary Customer Profile
+# Platform sender for staff alerts (its own 10DLC campaign on the parent account)
+TWILIO_PLATFORM_MESSAGING_SERVICE_SID=MG...   # or TWILIO_FROM=+1...
+PLATFORM_COMPLIANCE_EMAIL=compliance@aiautoengine.com
+WEBHOOK_BASE_URL=https://nsbchevy.aiautoengine.com
+
+# Email (Resend)
+RESEND_API_KEY=re_...
+RESEND_WEBHOOK_SECRET=whsec_...
+PLATFORM_EMAIL_DOMAIN=mail.aiautoengine.com    # verified in Resend; fallback sender for dealerships without their own domain
+INBOUND_EMAIL_DOMAIN=reply.aiautoengine.com    # Cloudflare Email Routing → workers/email-inbound
+INBOUND_EMAIL_SECRET=long-random-string

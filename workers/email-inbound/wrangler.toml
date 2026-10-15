@@ -1,0 +1,12 @@
+# Inbound email for customer replies. Deploy: npx wrangler deploy (from this folder)
+# Then: Cloudflare dashboard → aiautoengine.com → Email → Email Routing → enable for the
+# reply subdomain and add a catch-all rule "Send to Worker: vp-email-inbound".
+name = "vp-email-inbound"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+APP_URL = "https://nsbchevy.aiautoengine.com"
+
+# Secret (same value as INBOUND_EMAIL_SECRET on the Pages project):
+#   npx wrangler secret put INBOUND_EMAIL_SECRET

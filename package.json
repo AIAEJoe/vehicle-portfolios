@@ -1,0 +1,13 @@
+{
+  "name": "vehicle-portfolios",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public --port 8788",
+    "deploy": "wrangler pages deploy public --project-name vehicle-portfolios",
+    "test": "node --test tests/functions/*.test.js && bash tests/sql/run.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}
