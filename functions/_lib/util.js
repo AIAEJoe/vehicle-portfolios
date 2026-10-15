@@ -50,11 +50,11 @@ export function dealerSlugFromRequest(request, env) {
 /** Minimal PostgREST client. role: 'service' | 'anon' | a user JWT string. */
 export async function sb(env, path, { method = 'GET', body, role = 'service', headers = {}, prefer } = {}) {
   requireEnv(env, 'SUPABASE_URL', 'SUPABASE_ANON_KEY');
-  let key = env.SUPABASE_ANON_KEY;
-  let bearer = env.SUPABASE_ANON_KEY;
+  let key = String(env.SUPABASE_ANON_KEY).trim();
+  let bearer = key;
   if (role === 'service') {
     requireEnv(env, 'SUPABASE_SERVICE_ROLE_KEY');
-    key = bearer = env.SUPABASE_SERVICE_ROLE_KEY;
+    key = bearer = String(env.SUPABASE_SERVICE_ROLE_KEY).trim();
   } else if (role !== 'anon') {
     bearer = role;
   }
