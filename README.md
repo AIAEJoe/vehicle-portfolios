@@ -1,5 +1,7 @@
 # Vehicle Portfolios
 
+**Live:** https://vehicle-portfolios.pages.dev (NSB Chevy: https://nsbchevy.aiautoengine.com once DNS is set)
+
 Digital vehicle packets for car dealerships (similar to iPacket), run as a **multi-dealership platform**.
 Each store lives on its own subdomain, such as `nsbchevy.aiautoengine.com`. Each store's sender identity, customers,
 message history and messaging costs are kept separate.
