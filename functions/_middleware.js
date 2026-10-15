@@ -47,7 +47,7 @@ export async function portfolioMeta(env, dealer, slug, url) {
     `&slug=eq.${enc(slug)}&dealerships.slug=eq.${enc(dealer)}` +
     `&vehicle_photos.order=position.asc&vehicle_photos.limit=1&limit=1`;
   const r = await fetch(env.SUPABASE_URL.replace(/\/$/, '') + q, {
-    headers: { apikey: env.SUPABASE_ANON_KEY, authorization: `Bearer ${env.SUPABASE_ANON_KEY}` },
+    headers: { apikey: env.SUPABASE_ANON_KEY, ...(String(env.SUPABASE_ANON_KEY).startsWith('sb_') ? {} : { authorization: `Bearer ${env.SUPABASE_ANON_KEY}` }) },
   });
   if (!r.ok) return '';
   const rows = await r.json();

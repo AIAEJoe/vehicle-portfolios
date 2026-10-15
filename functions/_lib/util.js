@@ -58,11 +58,13 @@ export async function sb(env, path, { method = 'GET', body, role = 'service', he
   } else if (role !== 'anon') {
     bearer = role;
   }
+  // New-style keys (sb_publishable_…/sb_secret_…) aren't JWTs: send them only as apikey.
+  const authHeader = String(bearer).startsWith('sb_') ? {} : { authorization: `Bearer ${bearer}` };
   const res = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}${path}`, {
     method,
     headers: {
       apikey: key,
-      authorization: `Bearer ${bearer}`,
+      ...authHeader,
       'content-type': 'application/json',
       ...(prefer ? { prefer } : {}),
       ...headers,
