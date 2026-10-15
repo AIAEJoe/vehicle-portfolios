@@ -99,6 +99,13 @@ async function setup(context) {
   await context.route('https://cdn.jsdelivr.net/npm/@supabase/**', (r) => r.fulfill({ contentType: 'text/javascript', body: stub }));
   await context.route('https://cdn.jsdelivr.net/npm/qrcode-generator**', (r) => r.fulfill({ contentType: 'text/javascript', body: qrStub }));
   await context.route('https://maps.google.com/**', (r) => r.abort());
+  await context.route('https://www.newsmyrnachevy.com/**', (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><title>Used 2021 Chevrolet Tahoe LT | NSB Chevy</title>
+    <meta property="og:image" content="https://pictures.dealer.com/n/nsb/tahoe/1.jpg">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":["Product","Car"],"name":"2021 Chevrolet Tahoe LT","vehicleIdentificationNumber":"1GNSKNKD1MR100099",
+      "brand":{"@type":"Brand","name":"Chevrolet"},"model":"Tahoe","vehicleConfiguration":"LT","color":"Black","mileageFromOdometer":{"value":"42,100"},"sku":"T5521",
+      "itemCondition":"https://schema.org/UsedCondition","offers":{"@type":"Offer","price":"48995"},"image":["https://pictures.dealer.com/n/nsb/tahoe/1.jpg","https://pictures.dealer.com/n/nsb/tahoe/2.jpg"]}</script></head>
+    <body><h1>2021 Chevrolet Tahoe LT</h1><img src="https://pictures.dealer.com/n/nsb/tahoe/3.jpg"><img src="https://pictures.dealer.com/n/nsb/logo.png"></body></html>` }));
+  await context.route('https://pictures.dealer.com/**', (route) => route.fulfill({ contentType: 'image/jpeg', body: readFileSync(join(PUB, 'seed/jeep-05.jpg')) }));
   await context.route(`${ORIGIN}/**`, async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
@@ -113,6 +120,7 @@ async function setup(context) {
     if (p === '/api/recalls') return json(route, { recalls: [{ campaign: '18V332000', component: 'AIR BAGS', summary: 'Airbag may not deploy.', remedy: 'Dealers will replace the clockspring.' }], checked_at: new Date().toISOString() });
     if (p === '/api/import-listing') {
       api.imports++;
+      if (String(route.request().postDataJSON().url).includes('blocked')) return json(route, { error: 'The listing page returned an error (403)' }, 502);
       assert(route.request().headers().authorization, 'import sends auth');
       return json(route, { vehicle: { vin: '1GCUYDED5RZ100777', year: 2024, make: 'Chevrolet', model: 'Silverado 1500', trim: 'RST', price: 51995, mileage: 5, condition: 'new', photos: ['/seed/jeep-03.jpg', '/seed/jeep-04.jpg'], listing_url: 'https://www.newsmyrnachevy.com/inventory/x/' } });
     }
@@ -410,14 +418,44 @@ console.log('Dashboard');
     assert(v && v.source === 'import' && v.condition === 'new', JSON.stringify(v));
     assert((await db()).vehicle_photos.filter((p) => p.vehicle_id === v.id).length === 2, 'photos imported');
   });
+  await step('blocked website: helpful message, URL pasted in VIN box is moved to import', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles/new`);
+    await page.fill('#vin', 'https://www.newsmyrnachevy.com/inventory/blocked-tahoe/');
+    await page.click('#f-vin button');
+    await page.waitForSelector('text=blocks automatic imports');
+    assert(await page.evaluate(() => document.querySelector('#bm-help').open), 'bookmarklet help opened');
+    assert((await page.inputValue('#url')).startsWith('https://www.newsmyrnachevy.com/inventory/blocked'), 'moved to import box');
+  });
+  await step('one-click bookmarklet imports from the dealer page', async () => {
+    const href = await page.getAttribute('#bm', 'href');
+    assert(href.startsWith('javascript:'), 'bookmarklet href');
+    const dealer = await context.newPage();
+    watch(dealer);
+    await dealer.goto('https://www.newsmyrnachevy.com/inventory/used-2021-chevrolet-tahoe/');
+    await dealer.waitForFunction(() => [...document.images].every((i) => i.complete));
+    const popup = context.waitForEvent('page');
+    await dealer.evaluate((code) => { (0, eval)(code); }, decodeURIComponent(href.slice('javascript:'.length)));
+    const opened = await popup;
+    await opened.waitForSelector('#save-incoming');
+    const banner = await opened.textContent('#incoming');
+    assert(banner.includes('2021 Chevrolet Tahoe LT') && banner.includes('1GNSKNKD1MR100099') && banner.includes('3 photos'), banner);
+    await opened.click('#save-incoming');
+    await opened.waitForSelector('#details');
+    const d = await opened.evaluate(() => window.__DB);
+    const v = d.vehicles.find((x) => x.vin === '1GNSKNKD1MR100099');
+    assert(v && v.price === 48995 && v.mileage === 42100 && v.year === 2021 && v.stock_number === 'T5521' && v.source === 'import', JSON.stringify(v));
+    assert(d.vehicle_photos.filter((p) => p.vehicle_id === v.id).length === 3, 'photos (logo excluded)');
+    await opened.close(); await dealer.close();
+    await page.reload();
+  });
   await step('vehicle list filters', async () => {
     await page.goto(`${ORIGIN}/admin/vehicles`);
     await page.waitForSelector('.vrow');
-    assert((await page.$$('.vrow')).length === 3, 'three vehicles');
+    assert((await page.$$('.vrow')).length === 4, 'four vehicles');
     await page.selectOption('#status', 'draft');
     await page.waitForTimeout(200);
-    assert((await page.$$('.vrow')).length === 2, 'two drafts');
-    await page.fill('#q', 'tahoe');
+    assert((await page.$$('.vrow')).length === 3, 'three drafts');
+    await page.fill('#q', 'silverado');
     assert((await page.$$('.vrow')).length === 1, 'search');
   });
   await step('leads page shows and updates a lead', async () => {
@@ -668,7 +706,7 @@ console.log('Platform console');
     await page.click('[data-act=run]');
     await page.waitForSelector('text=Brand review (TCR');
     assert(api.a2p.at(-1).action === 'run', JSON.stringify(api.a2p));
-    assert((await page.$$('.steps li.done')).length === 18, 'progress shown');
+    await page.waitForFunction(() => document.querySelectorAll('.steps li.done').length === 18, null, { timeout: 5000 });
     await page.fill('#buy input', '386');
     await page.click('#buy button');
     await page.waitForSelector('text=Bought +13865551234');
