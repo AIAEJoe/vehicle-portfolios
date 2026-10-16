@@ -6,6 +6,7 @@ import {
 import { adminPage, STATUS_LABEL } from './layout.js';
 import { navigate } from '../router.js';
 import { resizeImage, uploadFile, removeFile } from './media.js';
+import { renderBuyersGuide, resolveGuide, needsBuyersGuide, isShorthand } from '../buyers-guide.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -13,7 +14,15 @@ const DOC_KINDS = [
   ['brochure', 'Brochure'], ['other', 'Other'],
 ];
 
-const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
+const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['guide', 'Buyers Guide'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
+
+const FULL_CONDITIONS = [
+  'Warranty service is provided to anyone who owns the vehicle during the warranty period',
+  'Warranty service is free of charge, including removing and reinstalling the system when necessary',
+  'The buyer can choose a replacement or a full refund if the vehicle or a part can\'t be repaired after a reasonable number of tries',
+  'The buyer only has to tell the dealer that warranty service is needed (no other duties, unless the dealer shows they are reasonable)',
+  'The dealer does not limit how long implied warranties last',
+];
 
 export default async function vehicleEdit(el, { id }) {
   const page = await adminPage(el, 'vehicles');
@@ -55,14 +64,14 @@ export default async function vehicleEdit(el, { id }) {
         </div>
       </div>
       ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">This portfolio is a draft. Customers can't open it until you publish.</div>` : ''}
-      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}</button>`)}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}</button>`)}</div>
       <div id="tab"></div>`);
     drawTab();
   }
 
   function drawTab() {
     const box = $('#tab', main);
-    ({ details, photos, documents, shares, recalls })[tab](box);
+    ({ details, photos, documents, guide, shares, recalls })[tab](box);
   }
 
   on(main, 'click', '[data-tab]', (e, b) => {
@@ -441,6 +450,142 @@ export default async function vehicleEdit(el, { id }) {
         else await copyText(link);
         form.reset();
         setTimeout(frame, 600);
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    });
+  }
+
+  // ---------------------------------------------------------------- FTC Buyers Guide
+  function guide(box) {
+    const d = ctx.dealership;
+    if (!needsBuyersGuide(v)) {
+      mount(box, html`<div class="card"><h2>FTC Buyers Guide</h2><p class="sub">Only used and certified pre-owned vehicles need a Buyers Guide. This vehicle is listed as new.</p></div>`);
+      return;
+    }
+    const g = resolveGuide(v, d);
+    const canEdit = ctx.isAdmin;
+    const defaultLabel = { as_is: 'As Is', implied_only: 'Implied warranties only' }[d.bg_default_warranty];
+    let systems = (Array.isArray(v.bg_systems) && v.bg_systems.length ? v.bg_systems : [{ system: '', duration: '' }]).map((s) => ({ ...s }));
+    const radio = (name, value, label, checked, extra = '') => html`<label class="check" style="font-weight:400"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''} ${canEdit ? '' : 'disabled'} ${raw(extra)}> ${label}</label>`;
+    const check = (name, label, checked) => html`<label class="check" style="font-weight:400"><input type="checkbox" name="${name}" ${checked ? 'checked' : ''} ${canEdit ? '' : 'disabled'}> ${label}</label>`;
+
+    mount(box, html`<form id="bg-form" class="card">
+      <h2>FTC Buyers Guide</h2>
+      ${g.pending ? html`<div class="notice warn"><strong>Warranty data pending.</strong> Customers currently see the <b>AS IS - NO DEALER WARRANTY</b> guide for this vehicle. Enter the warranty terms below, or set a default for all vehicles in <a href="/admin/settings">Settings</a>. Only staff see this message.</div>` : ''}
+      ${!v.bg_warranty && d.bg_default_warranty ? html`<div class="notice">Using your dealership default: <strong>${defaultLabel}</strong>. Choose terms below to override it for this vehicle.</div>` : ''}
+      ${canEdit ? '' : html`<div class="notice">Only dealership admins can change warranty terms.</div>`}
+      <p class="sub small">This drives the Buyers Guide on the customer page and the printed window guide. Enter only the terms you actually offer on this vehicle. If terms change during negotiation, update them here and reprint before closing so both match.</p>
+
+      <label>Warranty for this vehicle</label>
+      ${d.bg_default_warranty ? radio('bg_warranty', '', `Use dealership default (${defaultLabel})`, !v.bg_warranty) : ''}
+      ${radio('bg_warranty', 'as_is', html`<b>As Is</b> - no dealer warranty`, v.bg_warranty === 'as_is' || (!v.bg_warranty && !d.bg_default_warranty))}
+      ${radio('bg_warranty', 'implied_only', html`<b>Implied warranties only</b> (required where state law limits "as is" sales)`, v.bg_warranty === 'implied_only')}
+      ${radio('bg_warranty', 'dealer_warranty', html`<b>Dealer warranty</b>`, v.bg_warranty === 'dealer_warranty')}
+
+      <div id="dw" style="margin-left:24px">
+        <label>Full or limited?</label>
+        ${radio('bg_warranty_type', 'limited', 'Limited warranty', v.bg_warranty_type !== 'full')}
+        ${radio('bg_warranty_type', 'full', 'Full warranty', v.bg_warranty_type === 'full')}
+        <div id="full-checks" class="notice" style="margin-top:8px">
+          <p class="small" style="margin-top:0"><strong>Mark it FULL only if every statement is true</strong> (Magnuson-Moss Act, 15 U.S.C. 2304). Otherwise choose Limited.</p>
+          ${FULL_CONDITIONS.map((c, i) => html`<label class="check small" style="font-weight:400;align-items:flex-start"><input type="checkbox" name="full_${i}" ${v.bg_warranty_type === 'full' ? 'checked' : ''} ${canEdit ? '' : 'disabled'} style="margin-top:3px"> ${c}</label>`)}
+        </div>
+        <div id="pct" class="grid3">
+          <div><label for="bg-labor">Dealer pays % of labor</label><input id="bg-labor" name="bg_labor_pct" type="number" min="0" max="100" inputmode="numeric" value="${v.bg_labor_pct ?? ''}" ${canEdit ? '' : 'disabled'}></div>
+          <div><label for="bg-parts">Dealer pays % of parts</label><input id="bg-parts" name="bg_parts_pct" type="number" min="0" max="100" inputmode="numeric" value="${v.bg_parts_pct ?? ''}" ${canEdit ? '' : 'disabled'}></div>
+        </div>
+        <label for="bg-ded">Deductible (optional)</label>
+        <input id="bg-ded" name="bg_deductible" placeholder="A $50 deductible applies to each repair visit" value="${v.bg_deductible || ''}" ${canEdit ? '' : 'disabled'}>
+        <label>Covered systems and durations</label>
+        <p class="hint" style="margin-top:0">Name each system specifically, for example "Engine block, cylinder heads and internal parts" or "Transmission case and internal parts". The FTC does not allow shorthand like "drive train" or "power train".</p>
+        <div id="sys"></div>
+        ${canEdit ? html`<button type="button" class="btn alt sm" id="sys-add">+ Add system</button>` : ''}
+      </div>
+
+      <label style="margin-top:18px">Non-dealer warranties (check only what is actually true for this VIN)</label>
+      ${check('bg_mfr_warranty', "Manufacturer's original warranty still applies to some components", v.bg_mfr_warranty)}
+      ${check('bg_mfr_used_warranty', "Manufacturer's used vehicle warranty applies (for example, a certified pre-owned warranty)", v.bg_mfr_used_warranty)}
+      ${check('bg_other_used_warranty', 'Other used vehicle warranty applies', v.bg_other_used_warranty)}
+      <label style="margin-top:14px">Service contract</label>
+      ${check('bg_service_contract', 'We offer a service contract on this vehicle for an extra charge', v.bg_warranty ? v.bg_service_contract : (v.bg_service_contract || d.bg_default_service_contract))}
+
+      <div class="btn-row" style="margin-top:16px">
+        ${canEdit ? html`<button class="btn" type="submit">Save Buyers Guide</button>` : ''}
+        <a class="btn alt" href="/v/${v.slug}/buyers-guide?lang=en" target="_blank" data-external>Print (English)</a>
+        <a class="btn alt" href="/v/${v.slug}/buyers-guide?lang=es" target="_blank" data-external>Print (Español)</a>
+      </div>
+      ${v.bg_updated_at ? html`<p class="small sub">Warranty terms last changed ${dateTime(v.bg_updated_at)}.</p>` : ''}
+    </form>
+    <div class="card bg-wrap"><h2>Preview</h2><div id="bg-preview"></div></div>`);
+
+    const form = $('#bg-form', box);
+    const val = (n) => { const x = form.querySelector(`[name="${n}"]:checked`); return x ? x.value : null; };
+    const drawSystems = () => {
+      $('#sys', box).innerHTML = String(html`${systems.map((s, i) => html`<div class="grid2" style="align-items:end;margin-bottom:6px">
+        <div><input data-sys="${i}" data-k="system" placeholder="System, e.g. Engine block and cylinder heads" value="${s.system || ''}" aria-label="Covered system ${i + 1}" ${canEdit ? '' : 'disabled'}>
+          ${isShorthand(s.system) ? html`<div class="hint" style="color:var(--bad)">Name the parts specifically. "Drive train" / "power train" isn't allowed.</div>` : ''}</div>
+        <div class="btn-row"><input data-sys="${i}" data-k="duration" placeholder="30 days or 1,000 miles, whichever occurs first" value="${s.duration || ''}" aria-label="Duration ${i + 1}" style="flex:1" ${canEdit ? '' : 'disabled'}>
+          ${canEdit && systems.length > 1 ? html`<button type="button" class="btn ghost sm" data-sys-del="${i}" aria-label="Remove">✕</button>` : ''}</div></div>`)}`);
+    };
+    const collect = () => {
+      const w = val('bg_warranty') || null;
+      const type = val('bg_warranty_type');
+      const fd = new FormData(form);
+      return {
+        bg_warranty: w,
+        bg_warranty_type: w === 'dealer_warranty' ? type : null,
+        bg_labor_pct: w === 'dealer_warranty' && type === 'limited' && fd.get('bg_labor_pct') !== '' ? Number(fd.get('bg_labor_pct')) : null,
+        bg_parts_pct: w === 'dealer_warranty' && type === 'limited' && fd.get('bg_parts_pct') !== '' ? Number(fd.get('bg_parts_pct')) : null,
+        bg_deductible: w === 'dealer_warranty' ? (String(fd.get('bg_deductible') || '').trim() || null) : null,
+        bg_systems: w === 'dealer_warranty' ? systems.map((s) => ({ system: String(s.system || '').trim(), duration: String(s.duration || '').trim() })).filter((s) => s.system || s.duration) : [],
+        bg_mfr_warranty: fd.has('bg_mfr_warranty'),
+        bg_mfr_used_warranty: fd.has('bg_mfr_used_warranty'),
+        bg_other_used_warranty: fd.has('bg_other_used_warranty'),
+        bg_service_contract: fd.has('bg_service_contract'),
+      };
+    };
+    const refresh = () => {
+      const w = val('bg_warranty');
+      const type = val('bg_warranty_type');
+      $('#dw', box).hidden = w !== 'dealer_warranty';
+      $('#full-checks', box).hidden = type !== 'full';
+      $('#pct', box).hidden = type === 'full';
+      const draft = { ...v, ...collect() };
+      if (draft.bg_warranty_type === 'full') { draft.bg_labor_pct = 100; draft.bg_parts_pct = 100; }
+      const { front, back } = renderBuyersGuide(draft, d, 'en');
+      $('#bg-preview', box).innerHTML = String(html`${front}${back}`);
+    };
+    drawSystems();
+    refresh();
+    form.addEventListener('change', refresh);
+    form.addEventListener('input', (e) => {
+      const i = e.target.dataset.sys;
+      if (i !== undefined) {
+        systems[Number(i)][e.target.dataset.k] = e.target.value;
+        const warn = e.target.parentElement.querySelector('.hint');
+        if (e.target.dataset.k === 'system' && !!warn !== isShorthand(e.target.value)) { const pos = e.target.selectionStart; drawSystems(); const n = $(`[data-sys="${i}"][data-k="system"]`, box); n.focus(); n.setSelectionRange(pos, pos); }
+      }
+      refresh();
+    });
+    on(box, 'click', '#sys-add', () => { systems.push({ system: '', duration: '' }); drawSystems(); $(`[data-sys="${systems.length - 1}"][data-k="system"]`, box).focus(); });
+    on(box, 'click', '[data-sys-del]', (e, b) => { systems.splice(Number(b.dataset.sysDel), 1); drawSystems(); refresh(); });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = collect();
+      if (body.bg_warranty === 'dealer_warranty') {
+        if (!body.bg_warranty_type) { toast('Choose Full or Limited', 'bad'); return; }
+        if (body.bg_warranty_type === 'full' && FULL_CONDITIONS.some((_, i) => !form.querySelector(`[name="full_${i}"]`).checked)) {
+          toast('A FULL warranty must meet every condition listed. Otherwise choose Limited.', 'bad'); return;
+        }
+        if (body.bg_warranty_type === 'limited' && (body.bg_labor_pct === null || body.bg_parts_pct === null)) { toast('Enter the % of labor and parts the dealer pays', 'bad'); return; }
+        if (!body.bg_systems.length || body.bg_systems.some((s) => !s.system || !s.duration)) { toast('Each covered system needs a name and a duration', 'bad'); return; }
+        if (body.bg_systems.some((s) => isShorthand(s.system))) { toast('Name each covered system specifically. "Drive train" / "power train" isn\'t allowed.', 'bad'); return; }
+      }
+      try {
+        const saved = must(await sb.from('vehicles').update(body).eq('id', v.id).select('*').single());
+        Object.assign(v, saved);
+        toast('Buyers Guide saved. Reprint the window guide so it matches.');
+        frame();
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
   }

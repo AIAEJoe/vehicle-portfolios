@@ -17,4 +17,5 @@ $P -d vp -f "$ROOT/supabase/seed.sql"
 $P -d vp -f "$ROOT/supabase/seed.sql"   # idempotent
 $P -d vp -f "$ROOT/tests/sql/rls_test.sql"
 $P -d vp -f "$ROOT/tests/sql/messaging_test.sql"
+$P -d vp -f "$ROOT/tests/sql/buyers_guide_test.sql"
 echo "SQL TESTS PASSED"

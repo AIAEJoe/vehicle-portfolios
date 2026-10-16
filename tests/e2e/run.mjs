@@ -17,7 +17,7 @@ const ORIGIN = 'https://nsbchevy.aiautoengine.com';
 
 // ---- schema from the real migration ----
 function schemaFromSql() {
-  const sql = ['0001_vehicle_portfolios.sql', '0002_messaging_platform.sql'].map((f) => readFileSync(join(ROOT, 'supabase/migrations', f), 'utf8')).join('\n');
+  const sql = ['0001_vehicle_portfolios.sql', '0002_messaging_platform.sql', '0003_email_opens.sql', '0004_buyers_guide.sql'].map((f) => readFileSync(join(ROOT, 'supabase/migrations', f), 'utf8')).join('\n');
   const out = {};
   for (const m of sql.matchAll(/alter table public\.(\w+)\s+add column if not exists (\w+)/g)) (out['__alter_' + m[1]] ||= []).push(m[2]);
   for (const m of sql.matchAll(/create table if not exists public\.(\w+) \(([\s\S]*?)\n\);/g)) {
@@ -209,6 +209,29 @@ console.log('Public portfolio');
     const t = await page.textContent('.specs');
     for (const s of ['3.6L V6 24V VVT UPG I w/ESS', '8-Speed Automatic', 'Four Wheel Drive', '81,273', 'Black Cloth', '1C4GJXAG5JW150863']) assert(t.includes(s), s);
   });
+  await step('FTC Buyers Guide: below specs, above test drive, As Is by default', async () => {
+    const order = await page.evaluate(() => [...document.querySelectorAll('main section h2')].map((h) => h.textContent));
+    const i = order.indexOf('FTC Buyers Guide');
+    assert(i === order.indexOf('Specifications') + 1 && i < order.indexOf('Request a test drive'), order.join(' | '));
+    const t = await page.textContent('#buyers-guide');
+    for (const s of ['BUYERS GUIDE', 'AS IS - NO DEALER WARRANTY', 'THE DEALER DOES NOT PROVIDE A WARRANTY FOR ANY REPAIRS AFTER SALE.',
+      'Spoken promises are difficult to enforce. Ask the dealer to put all promises in writing. Keep this form.',
+      'ASK THE DEALER IF YOUR MECHANIC CAN INSPECT THE VEHICLE ON OR OFF THE LOT.', 'visit ftc.gov/usedcars', 'safercar.gov',
+      'Here is a list of some major defects that may occur in used vehicles.', 'Catalytic Converter', 'Air Bags',
+      'FOR COMPLAINTS AFTER SALE, CONTACT:', 'New Smyrna Beach Chevrolet · (386) 427-1313', '1C4GJXAG5JW150863',
+      'Removing this label before consumer purchase (except for purpose of test-driving) violates federal law (16 C.F.R. 455).']) assert(t.includes(s), s);
+    assert((await page.$$('#buyers-guide .bg-box.on')).length === 1, 'only As Is box checked');
+    assert(!t.includes('SERVICE CONTRACT') && !/pending/i.test(t), 'no service contract and no staff-only flag');
+  });
+  await step('Buyers Guide in Spanish', async () => {
+    await page.click('[data-bg-lang=es]');
+    const t = await page.textContent('#buyers-guide');
+    for (const s of ['GUÍA DEL COMPRADOR', 'COMO ESTÁ - SIN GARANTÍA DEL CONCESIONARIO', 'Convertidor catalítico', 'PARA QUEJAS DESPUÉS DE LA VENTA COMUNÍQUESE CON:']) assert(t.includes(s), s);
+    assert((await page.getAttribute('#bg-print', 'href')).endsWith('/buyers-guide?lang=es'), 'print link follows language');
+    await page.click('[data-bg-lang=en]');
+  });
+  await page.$eval('#buyers-guide', (e) => e.scrollIntoView());
+  await page.screenshot({ path: join(SHOTS, '02b-buyers-guide-mobile.png') });
   await step('view tracked once with visitor id', async () => {
     await page.waitForTimeout(300);
     assert(api.tracks.length === 1 && api.tracks[0].body.vehicle_id === V && api.tracks[0].body.visitor_id, JSON.stringify(api.tracks));
@@ -346,6 +369,73 @@ console.log('Dashboard');
     await page.click('#check');
     await page.waitForSelector('.recall');
     assert((await db()).vehicles[0].recalls.length === 1, 'saved');
+  });
+  await step('Buyers Guide tab: pending flag, shorthand blocked, limited warranty saved', async () => {
+    assert(await page.$('[data-tab=guide] .badge'), 'pending badge on tab');
+    await page.click('[data-tab=guide]');
+    await page.waitForSelector('#bg-form');
+    assert((await page.textContent('#bg-form')).includes('Warranty data pending'), 'pending notice');
+    await page.check('input[name=bg_warranty][value=dealer_warranty]');
+    await page.fill('#bg-labor', '100'); await page.fill('#bg-parts', '50');
+    await page.fill('#bg-ded', 'A $50 deductible applies to each repair visit');
+    await page.fill('[data-sys="0"][data-k=system]', 'Power train');
+    await page.fill('[data-sys="0"][data-k=duration]', '30 days or 1,000 miles, whichever occurs first');
+    assert((await page.textContent('#sys')).includes("isn't allowed"), 'inline shorthand warning');
+    await page.click('#bg-form button[type=submit]');
+    await page.waitForSelector('#toast >> text=specifically');
+    assert(!(await db()).vehicles[0].bg_warranty, 'not saved with shorthand');
+    await page.fill('[data-sys="0"][data-k=system]', 'Engine block, cylinder heads and internal parts');
+    await page.click('#sys-add');
+    await page.fill('[data-sys="1"][data-k=system]', 'Transmission case and internal parts');
+    await page.fill('[data-sys="1"][data-k=duration]', '30 days or 1,000 miles, whichever occurs first');
+    await page.check('input[name=bg_service_contract]');
+    const prev = await page.textContent('#bg-preview');
+    assert(prev.includes('The dealer will pay  100 % of the labor and  50 % of the parts') || /pay\s+100\s*% of the labor and\s+50\s*% of the parts/.test(prev), 'preview percentages: ' + prev.slice(0, 600));
+    await page.click('#bg-form button[type=submit]');
+    await page.waitForSelector('#toast >> text=Buyers Guide saved');
+    const v = (await db()).vehicles[0];
+    assert(v.bg_warranty === 'dealer_warranty' && v.bg_warranty_type === 'limited' && v.bg_labor_pct === 100 && v.bg_parts_pct === 50 && v.bg_service_contract === true, JSON.stringify(v));
+    assert(v.bg_systems.length === 2 && v.bg_systems[1].system === 'Transmission case and internal parts', JSON.stringify(v.bg_systems));
+    assert(!(await page.$('[data-tab=guide] .badge')), 'pending badge gone');
+  });
+  await step('FULL warranty requires every Magnuson-Moss condition', async () => {
+    await page.check('input[name=bg_warranty_type][value=full]');
+    await page.click('#bg-form button[type=submit]');
+    await page.waitForSelector('#toast >> text=must meet every condition');
+    assert((await db()).vehicles[0].bg_warranty_type === 'limited', 'still limited');
+    await page.check('input[name=bg_warranty_type][value=limited]');
+  });
+  await page.screenshot({ path: join(SHOTS, '05b-admin-buyers-guide.png'), fullPage: true });
+  await step('customer page shows the saved dealer warranty; print page matches', async () => {
+    const p2 = await context.newPage();
+    await p2.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b/buyers-guide?lang=en`);
+    await p2.waitForSelector('.bg-print-page .bg-front');
+    const t = await p2.textContent('.bg-print-page');
+    for (const s of ['DEALER WARRANTY', 'LIMITED WARRANTY.', 'Engine block, cylinder heads and internal parts', 'Transmission case and internal parts',
+      'A $50 deductible applies to each repair visit', 'SERVICE CONTRACT. A service contract on this vehicle is available for an extra charge.']) assert(t.includes(s), s);
+    assert((t.match(/30 days or 1,000 miles, whichever occurs first/g) || []).length === 1, 'shared duration stated once');
+    const checked = await p2.$$eval('.bg-front .bg-box.on', (b) => b.length);
+    assert(checked === 3, 'dealer warranty + limited + service contract checked, got ' + checked);
+    assert((await p2.$$('.bg-side')).length === 2, 'front and back');
+    await p2.emulateMedia({ media: 'print' });
+    const w = await p2.$eval('.bg-front', (e) => e.getBoundingClientRect());
+    assert(w.width >= 7.25 * 96 - 1 && w.height >= 11 * 96 - 1, `print size ${w.width}x${w.height}`);
+    assert(!(await p2.isVisible('#print')), 'toolbar hidden when printing');
+    await p2.screenshot({ path: join(SHOTS, '05c-buyers-guide-print.png'), fullPage: true });
+    await p2.close();
+  });
+  await step('settings: Buyers Guide complaint contact and default', async () => {
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.waitForSelector('#bg');
+    await page.fill('#s-bg_complaint_name', 'General Manager');
+    await page.fill('#s-bg_complaint_phone', '(386) 555-0199');
+    await page.selectOption('#s-bg_default_warranty', 'as_is');
+    await page.click('#bg button');
+    await page.waitForSelector('#toast >> text=Buyers Guide settings saved');
+    const d = (await db()).dealerships[0];
+    assert(d.bg_complaint_name === 'General Manager' && d.bg_default_warranty === 'as_is', JSON.stringify(d));
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
+    await page.waitForSelector('#details');
   });
   await step('share: activity shows opens; send personal link', async () => {
     await page.click('[data-tab=shares]');

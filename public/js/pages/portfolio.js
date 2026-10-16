@@ -4,6 +4,7 @@ import {
   loadingView, errMsg, $, $$, on, api, store, uuid, initials, copyText, esc,
 } from '../core.js';
 import { siteHeader, siteFooter } from './site.js';
+import { renderBuyersGuide, needsBuyersGuide } from '../buyers-guide.js';
 
 const DOC_LABELS = {
   window_sticker: 'Window sticker',
@@ -120,6 +121,15 @@ export default async function portfolio(el, { slug }) {
       <table class="specs">${specRows.map(([k, val]) => html`<tr><td>${k}</td><td>${val}</td></tr>`)}</table>
     </section>
 
+    ${needsBuyersGuide(v) ? html`<section class="card bg-wrap" id="buyers-guide"><h2>FTC Buyers Guide</h2>
+      <div class="bg-tabs no-print">
+        <button class="btn alt sm" data-bg-lang="en" aria-pressed="true">English</button>
+        <button class="btn alt sm" data-bg-lang="es" aria-pressed="false">Español</button>
+        <a class="btn ghost sm" id="bg-print" href="/v/${v.slug}/buyers-guide?lang=en" target="_blank" rel="noopener" data-external>Print Buyers Guide</a>
+      </div>
+      <div id="bg-body">${guideBody(v, d, 'en')}</div>
+    </section>` : ''}
+
     ${v.description ? html`<section class="card"><h2>About this vehicle</h2><div class="desc">${v.description}</div></section>` : ''}
 
     ${docs.length ? html`<section class="card"><h2>Documents</h2>
@@ -184,6 +194,14 @@ export default async function portfolio(el, { slug }) {
   on(el, 'click', '#gal-img', () => openLightbox(photos, idx, title, (i) => show(i)));
   swipe($('#gal', el), (dir) => show(idx + dir));
 
+  on(el, 'click', '[data-bg-lang]', (e, b) => {
+    const lang = b.dataset.bgLang;
+    $$('[data-bg-lang]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('#bg-body', el).innerHTML = String(guideBody(v, d, lang));
+    $('#bg-print', el).href = `/v/${v.slug}/buyers-guide?lang=${lang}`;
+    $('#bg-print', el).textContent = lang === 'es' ? 'Imprimir Guía del Comprador' : 'Print Buyers Guide';
+  });
+
   on(el, 'click', '#td-jump', (e) => {
     e.preventDefault();
     $('#test-drive', el).scrollIntoView({ behavior: 'smooth' });
@@ -222,6 +240,11 @@ export default async function portfolio(el, { slug }) {
   }
 
   track(v, shareCode);
+}
+
+function guideBody(v, d, lang) {
+  const { front, back } = renderBuyersGuide(v, d, lang);
+  return html`${front}${back}`;
 }
 
 async function track(v, shareCode) {

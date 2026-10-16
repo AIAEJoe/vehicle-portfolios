@@ -68,6 +68,16 @@ Platform operators (rows in `platform_admins`) have support access to every deal
 - One-click **unsubscribe** (RFC 8058 header plus footer link) and spam complaints both record an email opt-out.
 - Staff notifications, lead emails and the Elead ADF copy are logged and costed too.
 
+## FTC Buyers Guide (Used Car Rule, 16 CFR 455)
+
+Every used and certified pre-owned vehicle page shows the Buyers Guide (front and back) below Specifications, with an English/Español toggle and a **Print Buyers Guide** page (`/v/<slug>/buyers-guide?lang=en|es`, legal paper, black on white, 7½" × 11¼" per side).
+
+- Fixed wording is transcribed from the Rule text and Figures 1–6 of Part 455 (eCFR, Oct. 2026) in `public/js/buyers-guide.js`. Don't edit it.
+- Warranty terms are per vehicle (`vehicles.bg_*`), edited on the vehicle's **Buyers Guide** tab by dealership admins only (enforced in the database). The web page and the printed guide render from the same data.
+- The database rejects "drive train"/"power train" shorthand, requires labor/parts % for a limited warranty, and a covered system + duration for every line. FULL requires all five Magnuson-Moss conditions to be confirmed and is always 100%/100%.
+- No terms and no dealership default: the guide shows **AS IS** and the vehicle is flagged "Warranty data pending" in the dashboard only.
+- Dealership-wide settings (Settings → FTC Buyers Guide): complaints contact, default disclosure, service contracts, optional signature line.
+
 ## Costs and the $995 subscription
 
 Default rates are Twilio's published US long-code pricing and 10DLC fees, checked in October 2026. You can edit them under **Platform → Rates & plans**.

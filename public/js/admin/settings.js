@@ -52,6 +52,24 @@ export default async function settings(el) {
       <p class="hint">Email and texts need RESEND_API_KEY and Twilio keys set in Cloudflare. See the README.</p>
     </form>
 
+    <form class="card" id="bg"><h2>FTC Buyers Guide</h2>
+      <p class="sub small">Shown on every used vehicle page and printed for the window. Vehicle-specific warranty terms are set on each vehicle's <b>Buyers Guide</b> tab.</p>
+      <div class="grid2 stack-sm">
+        ${field(d, 'bg_complaint_name', 'Complaints after sale: name or position', 'text', 'For example "General Manager" or a person\'s name.', 'General Manager')}
+        ${field(d, 'bg_complaint_phone', 'Complaints after sale: phone', 'tel', 'Until set, the dealership\'s main phone is shown.')}
+      </div>
+      <label for="s-bg_default_warranty">Default for vehicles without their own warranty terms</label>
+      <select id="s-bg_default_warranty" name="bg_default_warranty">
+        <option value="" ${!d.bg_default_warranty ? 'selected' : ''}>None. Show "As Is" and flag the vehicle as warranty data pending</option>
+        <option value="as_is" ${d.bg_default_warranty === 'as_is' ? 'selected' : ''}>As Is - no dealer warranty</option>
+        <option value="implied_only" ${d.bg_default_warranty === 'implied_only' ? 'selected' : ''}>Implied warranties only</option>
+      </select>
+      <div class="hint">Choose only what you actually do. Some states limit or prohibit "as is" sales; in those states use "Implied warranties only".</div>
+      <label class="check"><input type="checkbox" name="bg_default_service_contract" ${d.bg_default_service_contract ? 'checked' : ''}> We offer service contracts on our used vehicles (applies to vehicles without their own terms)</label>
+      <label class="check"><input type="checkbox" name="bg_signature_line" ${d.bg_signature_line ? 'checked' : ''}> Add the optional buyer signature line to the guide</label>
+      <button class="btn" style="margin-top:12px">Save Buyers Guide settings</button>
+    </form>
+
     <div class="card"><h2>Inventory feed (HomeNet / vAuto)</h2>
       <form id="feed">
         ${field(s, 'feed_url', 'Feed URL (HTTPS)', 'url', 'The CSV download link from HomeNet/vAuto. It’s checked every hour.', 'https://…/inventory.csv')}
@@ -92,6 +110,24 @@ export default async function settings(el) {
         d = must(await sb.from('dealerships').update(patch).eq('id', D).select().single());
         clearDealerCache(); resetAdminContext(); setBrand(d);
         toast('Profile saved');
+        draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    });
+
+    $('#bg', main).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const patch = {
+        bg_complaint_name: String(fd.get('bg_complaint_name') || '').trim() || null,
+        bg_complaint_phone: String(fd.get('bg_complaint_phone') || '').trim() || null,
+        bg_default_warranty: fd.get('bg_default_warranty') || null,
+        bg_default_service_contract: fd.get('bg_default_service_contract') === 'on',
+        bg_signature_line: fd.get('bg_signature_line') === 'on',
+      };
+      try {
+        d = must(await sb.from('dealerships').update(patch).eq('id', D).select().single());
+        clearDealerCache(); resetAdminContext();
+        toast('Buyers Guide settings saved. Reprint window guides for vehicles that use the default.');
         draw();
       } catch (err) { toast(errMsg(err), 'bad'); }
     });

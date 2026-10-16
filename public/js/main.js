@@ -9,6 +9,7 @@ if (!configured) {
 } else {
   route('/', () => import('./pages/home.js'));
   route('/v/:slug', () => import('./pages/portfolio.js'));
+  route('/v/:slug/buyers-guide', () => import('./pages/buyers-guide-print.js'));
   route('/admin', () => import('./admin/vehicles.js'));
   route('/admin/login', () => import('./admin/login.js'));
   route('/admin/account', () => import('./admin/account.js'));

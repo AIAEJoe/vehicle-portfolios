@@ -265,3 +265,53 @@ code { background: #f0f2f5; padding: 1px 5px; border-radius: 4px; font-size: 13p
 .steps li.todo::before { content: '○ '; }
 @media (max-width: 640px) { .steps { columns: 1; } }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- FTC Buyers Guide (16 CFR 455): black on white, Arial, no branding ---------- */
+.bg-wrap { background: #fff; color: #000; }
+.bg-tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.bg-tabs [aria-pressed="true"] { background: var(--brand); color: #fff; }
+.bg-side { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; border: 1px solid #000; padding: 16px; font-size: 12px; line-height: 1.35; max-width: 7.25in; margin: 0 auto 14px; }
+.bg-side p { margin: 6px 0; }
+.bg-side b, .bg-side .bg-strong { font-weight: 700; }
+.bg-title { font-size: 26px; font-weight: 800; text-align: center; letter-spacing: .02em; padding-bottom: 6px; border-bottom: 1px solid #000; }
+.bg-important { font-size: 11.5px; }
+.bg-vehicle { display: grid; grid-template-columns: 1fr 1fr .6fr 2fr; gap: 8px; border-top: 1px solid #000; padding-top: 4px; margin: 6px 0; }
+.bg-vehicle > div, .bg-line > div { display: flex; flex-direction: column-reverse; min-width: 0; }
+.bg-val { font-size: 13px; min-height: 17px; overflow-wrap: anywhere; }
+.bg-lbl { font-size: 8.5px; text-transform: uppercase; }
+.bg-vehicle .bg-val { order: 2; }
+.bg-h2 { font-size: 14px; font-weight: 800; border-bottom: 2px solid #000; padding: 6px 0 2px; margin: 8px 0 6px; }
+.bg-choice { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
+.bg-big { font-size: 22px; font-weight: 800; line-height: 1.1; }
+.bg-caps { font-size: 11px; margin: 2px 0 0 !important; }
+.bg-dash { border-top: 1px dashed #000; margin: 8px 0 8px 42px; }
+.bg-box { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1.5px solid #000; font-weight: 700; font-size: 20px; }
+.bg-sub { display: flex; gap: 8px; align-items: flex-start; margin: 5px 0 5px 18px; font-size: 11px; }
+.bg-sub .bg-box { width: 13px; height: 13px; font-size: 10px; margin-top: 1px; border-width: 1px; }
+.bg-systems { margin: 8px 0; min-height: 40px; font-size: 11.5px; }
+.bg-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; padding: 1px 0; }
+.bg-fill { margin-top: 4px; }
+.bg-small { font-size: 11px; }
+.bg-rule { border-top: 1px solid #000; margin: 8px 0; }
+.bg-rule.thick { border-top-width: 2px; }
+.bg-defects { columns: 3 150px; column-gap: 16px; font-size: 10.5px; }
+.bg-defect { break-inside: avoid; margin-bottom: 6px; }
+.bg-defect b, .bg-defect span { display: block; }
+.bg-defect span { padding-left: 8px; text-indent: -0px; }
+.bg-line { border-bottom: 1px dotted #000; padding: 10px 0 2px; display: flex; flex-direction: column-reverse; }
+.bg-line .bg-lbl { order: 0; }
+.bg-line.bg-two { flex-direction: row; gap: 16px; }
+.bg-line.bg-two > div { flex: 1; }
+.bg-sign { padding-top: 24px; }
+.bg-admin-flag { display: none; }
+@media (max-width: 560px) { .bg-side { padding: 10px; font-size: 11.5px; } .bg-big { font-size: 18px; } .bg-vehicle { grid-template-columns: 1fr 1fr; } .bg-title { font-size: 22px; } }
+
+/* Printed window guide: 100% black on white stock no smaller than 11" high x 7¼" wide (§ 455.2(a)(2)). */
+.bg-print-page { background: #fff; padding: 16px; }
+.bg-print-page .bg-side { width: 7.5in; max-width: none; min-height: 11.25in; box-sizing: border-box; padding: .3in; font-size: 11.5px; }
+@media print {
+  @page { size: 8.5in 14in; margin: .4in .5in; }
+  body, .bg-print-page { background: #fff !important; padding: 0 !important; }
+  .bg-print-page .bg-side { margin: 0 auto; break-after: page; page-break-after: always; border: 1pt solid #000; }
+  .bg-side, .bg-side * { color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
