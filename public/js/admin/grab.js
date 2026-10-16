@@ -4,7 +4,7 @@
 // dashboard's Add-a-vehicle page with them.
 
 /* eslint-disable no-alert */
-export function grabVehicle(target) {
+export function grabVehicle(target, win) {
   const ld = [];
   const walk = (x) => {
     if (!x || typeof x !== 'object') return;
@@ -29,7 +29,8 @@ export function grabVehicle(target) {
       transmission: tx(car.vehicleTransmission), drivetrain: tx(car.driveWheelConfiguration), fuel_type: tx(car.fuelType),
       mileage: num(car.mileageFromOdometer), stock_number: tx(car.sku || car.productID),
       price: num(offer.price || (offer.priceSpecification && offer.priceSpecification.price)), name: tx(car.name),
-      description: (tx(car.description) || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500) || null,
+      description: (() => { const ta = document.createElement('textarea'); ta.innerHTML = tx(car.description) || ''; return ta.value
+        .replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n\n').trim().slice(0, 1500) || null; })(),
     });
     const cond = tx(car.itemCondition || offer.itemCondition) || '';
     if (/new/i.test(cond)) o.condition = 'new'; else if (/used/i.test(cond)) o.condition = 'used';
@@ -43,26 +44,57 @@ export function grabVehicle(target) {
     const t = String(o.name || document.title).match(/\b((?:19|20)\d{2})\s+([A-Za-z-]+)\s+([A-Za-z0-9-]+)/);
     if (t) { o.year = o.year || Number(t[1]); o.make = o.make || t[2]; o.model = o.model || t[3]; }
   }
+  // Dealer.com / Dealer Inspire galleries lazy-load most photos; every photo of this car has its VIN in the URL.
+  const vinPhotos = [];
+  if (o.vin) {
+    const re = /https?:\/\/[^"'\s()<>\\]+?\.(?:jpe?g|png|webp)/gi;
+    for (const m of document.documentElement.innerHTML.matchAll(re)) {
+      if (m[0].toUpperCase().includes(o.vin)) vinPhotos.push(m[0].replace(/&amp;/g, '&').replace(/\/thumbnails\/[a-z]+\//i, '/'));
+    }
+  }
+  // Trim: "Used 1993 Chevrolet Corvette 2DR CPE Coupe" -> "2DR CPE"
+  if (o.trim && o.make && o.model) {
+    let t = o.trim.replace(/^(used|new|certified|pre-owned)\s+/i, '').replace(String(o.year || ''), '');
+    t = t.replace(new RegExp('\\b' + o.make.replace(/[^\w ]/g, '') + '\\b', 'i'), '').replace(new RegExp('\\b' + o.model.replace(/[^\w ]/g, '') + '\\b', 'i'), '');
+    if (o.body_style) t = t.replace(new RegExp('\\b' + o.body_style.replace(/[^\w ]/g, '') + '\\s*$', 'i'), '');
+    o.trim = t.replace(/\s+/g, ' ').trim() || null;
+  }
+  // Engine / transmission are often only in the description's first line ("4-Speed Automatic 5.7L V8 16V")
+  const first = String(o.description || '').split(/\.\s|\n/)[0];
+  if (!o.transmission) { const m = first.match(/\b(\d{1,2}-Speed [A-Za-z/ -]+?|CVT|Automatic|Manual)(?=\s+\d\.\dL|\s*$|,)/i); if (m) o.transmission = m[1].trim(); }
+  if (!o.engine) { const m = first.match(/\b(\d\.\dL[^,]*)$/i) || first.match(/\b(\d\.\dL [A-Z0-9 -]+)/i); if (m) o.engine = m[1].trim(); }
   const og = document.querySelector('meta[property="og:image"]');
   if (og && og.content) o.photos.push(og.content);
-  const cdn = /pictures\.dealer\.com|dealerinspire|homenetiol|dealeron|vehicle-photos|inventory-photos|dealerphotos|images\.dealer|di-uploads|cloudfront\.net/i;
+  const cdn = /carscommerce|pictures\.dealer\.com|dealerinspire|homenetiol|dealeron|vehicle-photos|inventory-photos|dealerphotos|images\.dealer|di-uploads|cloudfront\.net/i;
   document.querySelectorAll('img').forEach((i) => {
     const u = i.currentSrc || i.src || i.getAttribute('data-src') || i.getAttribute('data-lazy');
     if (!u || !/\.(jpe?g|png|webp)/i.test(u) || /logo|icon|badge|sprite|carfax|autocheck|placeholder/i.test(u)) return;
     if ((i.naturalWidth || 0) >= 400 || cdn.test(u)) o.photos.push(u);
   });
+  // When the site names photos by VIN, use exactly those (skips "similar vehicles" and logos).
+  if (vinPhotos.length >= 2) o.photos = vinPhotos;
   const seen = new Set();
   o.photos = o.photos.filter(Boolean).map((u) => { try { return new URL(u, location.href).href; } catch (e) { return null; } })
-    .filter((u) => { if (!u) return false; const k = u.replace(/[?#].*$/, ''); if (seen.has(k)) return false; seen.add(k); return true; })
+    .filter((u) => { if (!u) return false; const k = u.replace(/[?#].*$/, '').replace(/\/thumbnails\/[a-z]+\//i, '/'); if (seen.has(k)) return false; seen.add(k); return true; })
     .slice(0, 60);
-  if (!o.vin && !o.make) { alert('No vehicle found on this page. Open one vehicle\'s page and click the button again.'); return null; }
+  if (!o.vin && !o.make) { if (win) win.close(); alert('No vehicle found on this page. Open one vehicle\'s page and click the button again.'); return null; }
   const payload = btoa(unescape(encodeURIComponent(JSON.stringify(o))));
-  window.open(`${target}/admin/vehicles/new#import=${encodeURIComponent(payload)}`, '_blank');
+  const url = `${target}/admin/vehicles/new#import=${encodeURIComponent(payload)}`;
+  if (win) win.location.href = url; else window.open(url, '_blank');
   return o;
 }
 
+/**
+ * The bookmark is a small launcher: it loads the latest grab.js from our site (so fixes apply without
+ * re-dragging the bookmark) and falls back to the copy embedded in the bookmark if that can't load.
+ * The tab is opened first, while the click still counts as a user action, so popup blockers allow it.
+ */
 export function bookmarkletHref(origin) {
-  return 'javascript:' + encodeURIComponent(`(${grabVehicle.toString()})(${JSON.stringify(origin)})`);
+  const O = JSON.stringify(origin);
+  return 'javascript:' + encodeURIComponent(`(function(){var O=${O};var w=window.open('about:blank','_blank');`
+    + `var run=function(g){try{g(O,w)}catch(e){if(w)w.close();alert('Could not read this page: '+e.message)}};`
+    + `import(O+'/js/admin/grab.js?t='+Date.now()).then(function(m){run(m.grabVehicle)})`
+    + `.catch(function(){run(${grabVehicle.toString()})})})()`);
 }
 
 export function decodeImport(hash) {

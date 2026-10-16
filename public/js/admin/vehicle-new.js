@@ -42,8 +42,8 @@ export default async function vehicleNew(el) {
     return must(await sb.from('vehicles').select('id').eq('dealership_id', ctx.dealership.id).eq('vin', vin).maybeSingle());
   }
 
-  async function create(fields, photos = [], source = 'manual') {
-    const row = { dealership_id: ctx.dealership.id, status: 'draft', source };
+  function toRow(fields) {
+    const row = {};
     for (const k of FIELDS) if (fields[k] !== undefined && fields[k] !== null && fields[k] !== '') row[k] = fields[k];
     const int = (x) => { const n = parseInt(String(x).replace(/[^0-9]/g, ''), 10); return Number.isFinite(n) ? n : undefined; };
     if (row.year !== undefined) row.year = int(row.year);
@@ -54,13 +54,36 @@ export default async function vehicleNew(el) {
     for (const k of Object.keys(row)) if (row[k] === undefined) delete row[k];
     if (fields.features && fields.features.length) row.features = fields.features;
     if (fields.specs) row.specs = fields.specs;
+    return row;
+  }
+
+  async function addPhotos(vehicleId, photos, source) {
+    if (!photos.length) return;
+    must(await sb.from('vehicle_photos').insert(photos.map((url, i) => ({
+      vehicle_id: vehicleId, dealership_id: ctx.dealership.id, url, position: i, source: source === 'import' ? 'import' : 'url',
+    }))));
+  }
+
+  /** Import onto a vehicle that already exists (same VIN): fill in what's missing, never overwrite staff edits. */
+  async function fillExisting(id, fields, photos) {
+    const cur = must(await sb.from('vehicles').select('*, vehicle_photos(id)').eq('id', id).single());
+    const incoming = toRow(fields);
+    const patch = {};
+    for (const [k, val] of Object.entries(incoming)) {
+      const now = cur[k];
+      if (now === null || now === undefined || now === '' || (Array.isArray(now) && !now.length)) patch[k] = val;
+    }
+    if (Object.keys(patch).length) must(await sb.from('vehicles').update(patch).eq('id', id));
+    const addedPhotos = cur.vehicle_photos.length ? 0 : photos.length;
+    if (addedPhotos) await addPhotos(id, photos, 'import');
+    return { filled: Object.keys(patch).length, addedPhotos };
+  }
+
+  async function create(fields, photos = [], source = 'manual') {
+    const row = { dealership_id: ctx.dealership.id, status: 'draft', source, ...toRow(fields) };
     if (ctx.me) row.salesperson_id = ctx.me.id;
     const v = must(await sb.from('vehicles').insert(row).select('id').single());
-    if (photos.length) {
-      must(await sb.from('vehicle_photos').insert(photos.map((url, i) => ({
-        vehicle_id: v.id, dealership_id: ctx.dealership.id, url, position: i, source: source === 'import' ? 'import' : 'url',
-      }))));
-    }
+    await addPhotos(v.id, photos, source);
     return v;
   }
 
@@ -131,7 +154,14 @@ export default async function vehicleNew(el) {
       e.target.disabled = true;
       try {
         const dup = await existing(incoming.vin);
-        if (dup) { toast('That VIN is already in your vehicles'); navigate(`/admin/vehicles/${dup.id}`); return; }
+        if (dup) {
+          const r = await fillExisting(dup.id, incoming, incoming.photos || []);
+          toast(r.filled || r.addedPhotos
+            ? `Already in your vehicles. Filled in ${r.filled} missing detail${r.filled === 1 ? '' : 's'}${r.addedPhotos ? ` and added ${r.addedPhotos} photos` : ''}.`
+            : 'Already in your vehicles, and nothing was missing.');
+          navigate(`/admin/vehicles/${dup.id}`);
+          return;
+        }
         const v = await create(incoming, incoming.photos || [], 'import');
         toast(`Imported with ${(incoming.photos || []).length} photos`);
         navigate(`/admin/vehicles/${v.id}`);

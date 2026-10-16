@@ -39,6 +39,7 @@ const OP = '9d2c1f1e-0000-4000-8000-0000000000dd';
 const SALES = '9d2c1f1e-0000-4000-8000-0000000000ee';
 const CUST = '9d2c1f1e-0000-4000-8000-0000000000c1';
 const NOW = Date.now();
+const CV = '1G1YY23P6P5100917';
 const SEED = {
   users: [{ id: OWNER, email: 'owner@nsb.test', password: 'correct-horse' }, { id: OP, email: 'op@aiautoengine.test', password: 'operator-pass' },
     { id: SALES, email: 'sales@nsb.test', password: 'sales-pass' }],
@@ -99,7 +100,22 @@ async function setup(context) {
   await context.route('https://cdn.jsdelivr.net/npm/@supabase/**', (r) => r.fulfill({ contentType: 'text/javascript', body: stub }));
   await context.route('https://cdn.jsdelivr.net/npm/qrcode-generator**', (r) => r.fulfill({ contentType: 'text/javascript', body: qrStub }));
   await context.route('https://maps.google.com/**', (r) => r.abort());
-  await context.route('https://www.newsmyrnachevy.com/**', (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><title>Used 2021 Chevrolet Tahoe LT | NSB Chevy</title>
+  // A Dealer Inspire page like the real site: lazy-loaded gallery, photos named by VIN, "similar vehicles" with other VINs
+
+  const corvette = `<!doctype html><html><head><title>Pre-Owned 1993 Chevrolet Corvette 2DR CPE Coupe | NSB Chevy</title>
+    <meta property="og:image" content="https://vehicle-images.carscommerce.inc/58ad-1/${CV}/thumbnails/large/p0.jpg">
+    <script type="application/ld+json">{"@context":"https://schema.org/","@type":["Product","Car"],"@id":"PL17115B","name":"Pre-Owned 1993 Chevrolet Corvette 2DR CPE",
+      "image":"https://vehicle-images.carscommerce.inc/58ad-1/${CV}/thumbnails/large/p0.jpg","description":"Blue 1993 Chevrolet Corvette 4-Speed Automatic 5.7L V8 16V&lt;br&gt;Priced to sell.",
+      "sku":"PL17115B","vehicleEngine":"","vehicleTransmission":"","bodyType":"Coupe","vehicleConfiguration":"Used 1993 Chevrolet Corvette 2DR CPE Coupe","fuelType":"Gasoline Fuel",
+      "brand":{"@type":"Brand","name":"Chevrolet"},"model":"Corvette","vehicleModelDate":"1993","itemCondition":"https://schema.org/UsedCondition","vehicleIdentificationNumber":"${CV}",
+      "color":"Blue","mileageFromOdometer":{"@type":"QuantitativeValue","value":"56974"},"offers":{"@type":"Offer","price":"16896"}}</script></head>
+    <body><h1>1993 Chevrolet Corvette</h1>
+    <img src="https://vehicle-images.carscommerce.inc/58ad-1/${CV}/thumbnails/large/p0.jpg">
+    ${Array.from({ length: 12 }, (_, i) => `<div class="slide"><img data-src="https://vehicle-images.carscommerce.inc/x${i}-1/${CV}/p${i}.jpg" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div>`).join('')}
+    <section class="similar"><img src="https://vehicle-images.carscommerce.inc/aa-1/1GNSKNKD1MR100099/thumbnails/large/other.jpg"></section></body></html>`;
+  await context.route('https://vehicle-images.carscommerce.inc/**', (route) => route.fulfill({ contentType: 'image/jpeg', body: readFileSync(join(PUB, 'seed/jeep-06.jpg')) }));
+  await context.route('https://www.newsmyrnachevy.com/inventory/used-1993-chevrolet-corvette/', (route) => route.fulfill({ contentType: 'text/html', body: corvette }));
+  await context.route(/https:\/\/www\.newsmyrnachevy\.com\/(?!inventory\/used-1993-chevrolet-corvette\/).*/, (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><title>Used 2021 Chevrolet Tahoe LT | NSB Chevy</title>
     <meta property="og:image" content="https://pictures.dealer.com/n/nsb/tahoe/1.jpg">
     <script type="application/ld+json">{"@context":"https://schema.org","@type":["Product","Car"],"name":"2021 Chevrolet Tahoe LT","vehicleIdentificationNumber":"1GNSKNKD1MR100099",
       "brand":{"@type":"Brand","name":"Chevrolet"},"model":"Tahoe","vehicleConfiguration":"LT","color":"Black","mileageFromOdometer":{"value":"42,100"},"sku":"T5521",
@@ -538,10 +554,36 @@ console.log('Dashboard');
     await opened.close(); await dealer.close();
     await page.reload();
   });
+  await step('bookmark on a VIN that already exists fills in the details and all gallery photos', async () => {
+    // A vehicle created earlier from its VIN alone, like the real Corvette
+    await page.evaluate((vin) => { window.__DB.vehicles.push({ id: 'cv-existing', dealership_id: window.__DB.dealerships[0].id, slug: '1993-chevrolet-corvette', status: 'published', condition: 'used', vin, year: 1993, make: 'Chevrolet', model: 'Corvette', price: 15000, features: [], specs: {}, source: 'manual', feed_locked: false, bg_systems: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() }); }, CV);
+    const href = await page.getAttribute('#bm', 'href');
+    const dealer = await context.newPage();
+    watch(dealer);
+    await dealer.goto('https://www.newsmyrnachevy.com/inventory/used-1993-chevrolet-corvette/');
+    const popup = context.waitForEvent('page');
+    await dealer.evaluate((code) => { (0, eval)(code); }, decodeURIComponent(href.slice('javascript:'.length)));
+    const opened = await popup;
+    await opened.waitForSelector('#save-incoming');
+    const banner = await opened.textContent('#incoming');
+    assert(banner.includes('1993 Chevrolet Corvette 2DR CPE') && banner.includes('13 photos'), banner);
+    await opened.evaluate((db) => { window.__DB.vehicles = db.vehicles; window.__DB.vehicle_photos = db.vehicle_photos; }, await page.evaluate(() => window.__DB));
+    await opened.click('#save-incoming');
+    await opened.waitForSelector('#details');
+    assert(opened.url().includes('/admin/vehicles/cv-existing'), opened.url());
+    const d = await opened.evaluate(() => window.__DB);
+    const v = d.vehicles.find((x) => x.id === 'cv-existing');
+    assert(v.stock_number === 'PL17115B' && v.mileage === 56974 && v.trim === '2DR CPE' && v.engine === '5.7L V8 16V' && v.transmission === '4-Speed Automatic', JSON.stringify(v));
+    assert(v.price === 15000, 'price staff already set is kept');
+    const ph = d.vehicle_photos.filter((p) => p.vehicle_id === 'cv-existing');
+    assert(ph.length === 13 && ph.every((p) => p.url.includes(CV) && !p.url.includes('/thumbnails/')), JSON.stringify(ph.map((p) => p.url)));
+    await opened.close(); await dealer.close();
+    await page.reload();
+  });
   await step('vehicle list filters', async () => {
     await page.goto(`${ORIGIN}/admin/vehicles`);
     await page.waitForSelector('.vrow');
-    assert((await page.$$('.vrow')).length === 4, 'four vehicles');
+    assert((await page.$$('.vrow')).length === 5, 'five vehicles');
     await page.selectOption('#status', 'draft');
     await page.waitForTimeout(200);
     assert((await page.$$('.vrow')).length === 3, 'three drafts');
