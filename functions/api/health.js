@@ -26,5 +26,6 @@ export const onRequestGet = async ({ env }) => {
     encryption_key: enc,
     cron_secret: env.CRON_SECRET ? (String(env.CRON_SECRET).trim().length >= 32 ? 'ok' : 'too short') : 'missing',
     twilio: !!env.TWILIO_ACCOUNT_SID, resend: !!env.RESEND_API_KEY,
+    sftp: ['SFTPTOGO_WEBHOOK_SECRET', 'SFTPTOGO_ACCESS_KEY_ID', 'SFTPTOGO_SECRET_ACCESS_KEY', 'SFTPTOGO_BUCKET'].filter((k) => !env[k]).map((k) => 'missing ' + k).join(', ') || 'ok',
   });
 };

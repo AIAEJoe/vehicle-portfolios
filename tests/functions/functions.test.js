@@ -352,3 +352,63 @@ test('invite: admin invites new user and links salesperson', async () => {
   assert.deepEqual(store.member, { dealership_id: 'd1', user_id: 'new-user', role: 'sales' });
   assert.deepEqual(store.staff.body, { user_id: 'new-user' });
 });
+
+// ---------- SFTP To Go inventory feed ----------
+import { onRequestPost as sftpPost, validSftpToGoSignature } from '../../functions/api/inventory/sftp.js';
+import { signedS3Request } from '../../functions/_lib/s3.js';
+
+const SFTP_ENV = { ...ENV, SFTPTOGO_WEBHOOK_SECRET: 'Very Secret Secret', SFTPTOGO_ACCESS_KEY_ID: 'AKIDEXAMPLE',
+  SFTPTOGO_SECRET_ACCESS_KEY: 'secret/key', SFTPTOGO_BUCKET: 'sftptogo-bucket' };
+async function hubSig(secret, body) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(body)));
+  return 'sha256=' + [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+test('SFTP To Go signature matches their documented test vector', async () => {
+  const sig = 'sha256=8ba4c47558de1872150c3ec82211c34bf0cbd6d60fc4f9875b97853af06de917';
+  assert.equal(await validSftpToGoSignature('Very Secret Secret', 'Hello! This is a test payload.', sig), true);
+  assert.equal(await validSftpToGoSignature('Very Secret Secret', 'Hello! This is a test payload!', sig), false);
+  assert.equal(await validSftpToGoSignature('', 'x', sig), false);
+});
+
+test('S3 request is signed for the right host and path', async () => {
+  const r = await signedS3Request({ bucket: 'b1', key: 'nsbchevy/Inventory File.csv', region: 'us-east-1', accessKeyId: 'AK', secretAccessKey: 'SK', now: new Date('2026-10-17T12:00:00Z') });
+  assert.equal(r.url, 'https://b1.s3.amazonaws.com/nsbchevy/Inventory%20File.csv');
+  assert.match(r.headers.authorization, /^AWS4-HMAC-SHA256 Credential=AK\/20261017\/us-east-1\/s3\/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=[0-9a-f]{64}$/);
+});
+
+test('SFTP upload from Dealer Inspire imports the dealership inventory', async () => {
+  const csv = 'VIN,Stock,Type,Year,Make,Model,Price,Miles,ImageList\n1G1YY23P6P5100917,PL17115B,Used,1993,Chevrolet,Corvette,16896,56974,https://img/1.jpg|https://img/2.jpg\n2C3CDXBG7FH874715,C1,Used,2015,Dodge,Charger,12995,90000,\n1GNSKNKD1MR100099,T5521,Used,2021,Chevrolet,Tahoe,48995,42100,';
+  let synced = null; let patched = null;
+  mock((u) => u.includes('/rest/v1/dealerships?slug=eq.nsbchevy'), () => [DEALER]);
+  mock((u) => u.includes('/rest/v1/dealerships?slug=eq.'), () => []);
+  mock('/rest/v1/dealership_settings?dealership_id=eq.d1&select', () => [{ dealership_id: 'd1', feed_auto_publish: true, feed_mark_missing_sold: true }]);
+  mock((u, c) => u.includes('/rest/v1/dealership_settings') && c.method === 'PATCH', (u, c) => { patched = JSON.parse(c.body); return ''; });
+  mock('/rest/v1/rpc/vp_feed_sync', (u, c) => { synced = JSON.parse(c.body); return { inserted: 2, updated: 1, marked_sold: 0 }; });
+  mock((u) => u.startsWith('https://sftptogo-bucket.s3.amazonaws.com/'), (u, c) => {
+    assert.match(c.headers.authorization, /Credential=AKIDEXAMPLE\//);
+    return u.endsWith('/nsbchevy/inventory.csv') ? new Response(csv) : new Response('NoSuchKey', { status: 404 });
+  });
+  const body = JSON.stringify({ Id: 'e1', Topic: 'file.created', Actor: { Type: 'User', Id: 'nsbchevy' }, Resource: 'File', Data: { Path: 'inventory.csv', Size: csv.length } });
+  const res = await sftpPost(ctx(req('https://nsbchevy.aiautoengine.com/api/inventory/sftp', { method: 'POST', body, headers: { 'x-hub-signature': await hubSig('Very Secret Secret', body) } }), { env: SFTP_ENV }));
+  assert.equal(res.status, 204);
+  assert.ok(synced, 'feed sync ran');
+  assert.equal(synced.p_dealership_id, 'd1');
+  assert.equal(synced.p_rows.length, 3);
+  assert.deepEqual(synced.p_rows[0].photos, ['https://img/1.jpg', 'https://img/2.jpg']);
+  assert.equal(patched.feed_last_result.source, 'sftp: inventory.csv');
+});
+
+test('SFTP webhook rejects bad signatures and ignores non-feed events', async () => {
+  const body = JSON.stringify({ Topic: 'file.created', Actor: { Type: 'User', Id: 'nsbchevy' }, Data: { Path: 'inventory.csv' } });
+  const bad = await sftpPost(ctx(req('https://x.aiautoengine.com/api/inventory/sftp', { method: 'POST', body, headers: { 'x-hub-signature': 'sha256=00' } }), { env: SFTP_ENV }));
+  assert.equal(bad.status, 401);
+  const ping = JSON.stringify({ Topic: 'webhook.ping', Data: {} });
+  const ok = await sftpPost(ctx(req('https://x.aiautoengine.com/api/inventory/sftp', { method: 'POST', body: ping, headers: { 'x-hub-signature': await hubSig('Very Secret Secret', ping) } }), { env: SFTP_ENV }));
+  assert.equal(ok.status, 204);
+  const folder = JSON.stringify({ Topic: 'file.created', Actor: { Type: 'User', Id: 'nsbchevy' }, Data: { Path: 'archive/' } });
+  const r2 = await sftpPost(ctx(req('https://x.aiautoengine.com/api/inventory/sftp', { method: 'POST', body: folder, headers: { 'x-hub-signature': await hubSig('Very Secret Secret', folder) } }), { env: SFTP_ENV }));
+  assert.equal(r2.status, 204);
+  assert.equal(sent('s3.amazonaws.com').length, 0, 'folders are not downloaded');
+});

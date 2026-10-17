@@ -153,6 +153,17 @@ In `supabase/cron.sql`, replace `REPLACE_WITH_CRON_SECRET` with your secret and 
 
 ---
 
+### Inventory feeds by SFTP (SFTP To Go)
+
+Feed providers that can only push by SFTP (Dealer Inspire, HomeNet) upload to one platform SFTP To Go account.
+
+1. In SFTP To Go, create a **credential** per dealership: username = the dealership slug (e.g. `nsbchevy`), home directory `/nsbchevy`, password or the provider's SSH key. Send the provider the host, port 22, username and password.
+2. **Root credentials** → copy the Access Key ID, Secret Access Key and bucket name into Cloudflare secrets `SFTPTOGO_ACCESS_KEY_ID`, `SFTPTOGO_SECRET_ACCESS_KEY`, `SFTPTOGO_BUCKET` (set `SFTPTOGO_REGION` only if the bucket isn't in us-east-1; it's detected anyway).
+3. **Webhooks** → add `https://nsbchevy.aiautoengine.com/api/inventory/sftp`, topic `file.created`; put its signing secret in `SFTPTOGO_WEBHOOK_SECRET`. Redeploy.
+4. `/api/health` shows `sftp: ok` when all four are set.
+
+The webhook verifies `X-Hub-Signature` (HMAC-SHA256), maps the upload to a dealership by SFTP username (or first folder), downloads it with S3 SigV4 and runs the normal import (`runFeedSync`). Directories and non-CSV/TXT files are ignored.
+
 ## Onboarding a new dealership (runbook)
 
 | Step | Who | Where | Notes |

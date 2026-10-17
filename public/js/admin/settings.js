@@ -87,6 +87,14 @@ export default async function settings(el) {
         ${r ? (r.error ? html`<div class="notice bad">Last attempt failed (${r.source}, ${dateTime(r.at)}): ${r.error}</div>`
           : html`<div class="notice ok">${r.rows} vehicles in feed · ${r.inserted} added · ${r.updated} updated · ${r.marked_sold} marked sold${r.locked ? ` · ${r.locked} locked` : ''}${r.skipped ? ` · ${r.skipped} skipped (no valid VIN)` : ''} (${r.source})</div>`) : ''}
       </div>
+      <h3 style="font-size:16px;margin-top:20px">Receive the feed by SFTP</h3>
+      <p class="small sub">For providers that can only send by SFTP (Dealer Inspire, HomeNet). Give them the SFTP host and password from Vehicle Portfolios support, plus:</p>
+      <ul class="small" style="margin-top:0">
+        <li>Username: <strong>${d.slug}</strong></li>
+        <li>Upload folder: their home folder (no subfolder needed)</li>
+        <li>File: CSV or tab-delimited with a header row, full inventory, any file name ending in .csv or .txt</li>
+      </ul>
+      <p class="small sub">Each upload is imported within a minute. Results show under "Last sync" above as "sftp: &lt;file name&gt;".</p>
       <h3 style="font-size:16px;margin-top:20px">Upload a feed file by hand</h3>
       <form id="upload" class="copy-field"><input type="file" name="file" accept=".csv,.txt,text/csv" required aria-label="CSV file"><button class="btn alt">Upload &amp; sync</button></form>
       <h3 style="font-size:16px;margin-top:20px">Relay address (if HomeNet can only send by FTP)</h3>
