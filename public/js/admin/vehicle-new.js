@@ -7,6 +7,34 @@ import { bookmarkletHref, decodeImport } from './grab.js';
 const FIELDS = ['vin', 'stock_number', 'condition', 'year', 'make', 'model', 'trim', 'body_style', 'exterior_color',
   'interior_color', 'engine', 'transmission', 'drivetrain', 'fuel_type', 'mileage', 'price', 'description', 'listing_url'];
 
+/**
+ * Dealer websites mix promo banners ("Lower prices start here"), logos and staff photos in with
+ * the car's photos. Real vehicle photos are landscape and roughly 4:3 to 16:9; banners are much
+ * wider, and logos/badges are small. Load each image and keep only the ones shaped like a photo.
+ * Images that don't answer in time are kept, so a slow site never loses real photos.
+ */
+export function looksLikeVehiclePhoto(w, h) {
+  if (!w || !h) return false;
+  const ratio = w / h;
+  return w >= 320 && h >= 200 && ratio >= 1.1 && ratio <= 2.0;
+}
+
+function imageSize(url, ms = 8000) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const done = (v) => { clearTimeout(t); img.onload = img.onerror = null; resolve(v); };
+    const t = setTimeout(() => done('timeout'), ms);
+    img.onload = () => done({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => done(null);
+    img.src = url;
+  });
+}
+
+async function vehiclePhotosOnly(urls) {
+  const sizes = await Promise.all(urls.map((u) => imageSize(u)));
+  return urls.filter((u, i) => sizes[i] === 'timeout' || (sizes[i] && looksLikeVehiclePhoto(sizes[i].w, sizes[i].h)));
+}
+
 export default async function vehicleNew(el) {
   const page = await adminPage(el, 'vehicles');
   if (!page) return;
@@ -58,10 +86,12 @@ export default async function vehicleNew(el) {
   }
 
   async function addPhotos(vehicleId, photos, source) {
-    if (!photos.length) return;
+    if (source === 'import') photos = await vehiclePhotosOnly(photos);
+    if (!photos.length) return 0;
     must(await sb.from('vehicle_photos').insert(photos.map((url, i) => ({
       vehicle_id: vehicleId, dealership_id: ctx.dealership.id, url, position: i, source: source === 'import' ? 'import' : 'url',
     }))));
+    return photos.length;
   }
 
   /** Import onto a vehicle that already exists (same VIN): fill in what's missing, never overwrite staff edits. */
@@ -74,8 +104,7 @@ export default async function vehicleNew(el) {
       if (now === null || now === undefined || now === '' || (Array.isArray(now) && !now.length)) patch[k] = val;
     }
     if (Object.keys(patch).length) must(await sb.from('vehicles').update(patch).eq('id', id));
-    const addedPhotos = cur.vehicle_photos.length ? 0 : photos.length;
-    if (addedPhotos) await addPhotos(id, photos, 'import');
+    const addedPhotos = cur.vehicle_photos.length ? 0 : await addPhotos(id, photos, 'import');
     return { filled: Object.keys(patch).length, addedPhotos };
   }
 
@@ -83,7 +112,7 @@ export default async function vehicleNew(el) {
     const row = { dealership_id: ctx.dealership.id, status: 'draft', source, ...toRow(fields) };
     if (ctx.me) row.salesperson_id = ctx.me.id;
     const v = must(await sb.from('vehicles').insert(row).select('id').single());
-    await addPhotos(v.id, photos, source);
+    v.photoCount = await addPhotos(v.id, photos, source);
     return v;
   }
 
@@ -99,7 +128,7 @@ export default async function vehicleNew(el) {
       const dup = await existing(vehicle.vin);
       if (dup) { toast('That VIN is already in your vehicles'); navigate(`/admin/vehicles/${dup.id}`); return; }
       const v = await create(vehicle, vehicle.photos || [], 'import');
-      toast(`Imported with ${(vehicle.photos || []).length} photos`);
+      toast(`Imported with ${v.photoCount || 0} photos`);
       navigate(`/admin/vehicles/${v.id}`);
     } catch (err) {
       const blocked = /\b(403|401|429|503)\b/.test(errMsg(err));
@@ -163,7 +192,7 @@ export default async function vehicleNew(el) {
           return;
         }
         const v = await create(incoming, incoming.photos || [], 'import');
-        toast(`Imported with ${(incoming.photos || []).length} photos`);
+        toast(`Imported with ${v.photoCount || 0} photos`);
         navigate(`/admin/vehicles/${v.id}`);
       } catch (err) { toast(errMsg(err), 'bad'); e.target.disabled = false; }
     });

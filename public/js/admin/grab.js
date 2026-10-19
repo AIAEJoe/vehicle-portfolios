@@ -68,7 +68,7 @@ export function grabVehicle(target, win) {
   const cdn = /carscommerce|pictures\.dealer\.com|dealerinspire|homenetiol|dealeron|vehicle-photos|inventory-photos|dealerphotos|images\.dealer|di-uploads|cloudfront\.net/i;
   document.querySelectorAll('img').forEach((i) => {
     const u = i.currentSrc || i.src || i.getAttribute('data-src') || i.getAttribute('data-lazy');
-    if (!u || !/\.(jpe?g|png|webp)/i.test(u) || /logo|icon|badge|sprite|carfax|autocheck|placeholder/i.test(u)) return;
+    if (!u || !/\.(jpe?g|png|webp)/i.test(u) || /logo|icon|badge|sprite|placeholder|carfax|autocheck|banner|promo|incentive|coupon|(?:^|[^a-z])(?:specials?|offers?|buttons?|header|footer|staff|employees?|awards?)(?:[^a-z]|$)/i.test(u)) return;
     if ((i.naturalWidth || 0) >= 400 || cdn.test(u)) o.photos.push(u);
   });
   // When the site names photos by VIN, use exactly those (skips "similar vehicles" and logos).

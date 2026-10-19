@@ -56,6 +56,21 @@ function meta(html, prop) {
   return c ? decodeEntities(c[1]) : null;
 }
 
+// Anywhere in the URL ("dealerlogo.png"), plus whole words that would be too broad as substrings.
+const NOT_A_VEHICLE_PHOTO = /logo|icon|badge|sprite|placeholder|carfax|autocheck|banner|promo|incentive|coupon|(?:^|[^a-z])(?:specials?|offers?|buttons?|header|footer|staff|employees?|awards?)(?:[^a-z]|$)/i;
+
+/** "Used 2026 Chevrolet Corvette Stingray 2LT Convertible" -> "2LT" (year/make/model/body are shown separately). */
+function cleanTrim({ trim, year, make, model, body_style: body }) {
+  if (!trim) return trim;
+  const word = (s) => new RegExp(`\\b${String(s).replace(/[^\w ]/g, '').replace(/\s+/g, '\\s+')}\\b`, 'i');
+  let t = String(trim).replace(/^(used|new|certified|pre-owned)\s+/i, '');
+  if (year) t = t.replace(word(year), '');
+  if (make) t = t.replace(word(make), '');
+  if (model) t = t.replace(word(model), '');
+  if (body) t = t.replace(new RegExp(`${word(body).source}\\s*$`, 'i'), '');
+  return t.replace(/\s+/g, ' ').trim() || null;
+}
+
 export function parseListing(html, pageUrl) {
   const out = { photos: [], features: [], specs: {} };
   const ld = [];
@@ -114,14 +129,20 @@ export function parseListing(html, pageUrl) {
 
   const og = meta(html, 'og:image');
   if (og) out.photos.push(og);
-  // Common dealer-platform photo CDNs, in page order
+  // Common dealer-platform photo CDNs, in page order. Dealer sites host their promo banners
+  // ("Lower prices start here", specials, staff photos) on the same CDN, so skip obvious ones.
+  const vinPhotos = [];
   for (const m of html.matchAll(/https?:\/\/[^"'\s>)]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s>)]*)?/gi)) {
     const u = decodeEntities(m[0]);
+    if (out.vin && u.toUpperCase().includes(String(out.vin).toUpperCase())) vinPhotos.push(u);
     if (/pictures\.dealer\.com|dealerinspire|homenetiol|cdn-ds|dealeron|vehicle-photos|inventory-photos|dealerphotos|getedealer|carsforsale|cloudfront\.net\/.*(?:vehicle|inventory)|images\.dealer|di-uploads/i.test(u)
-        && !/logo|icon|badge|sprite|placeholder|carfax|autocheck/i.test(u)) {
+        && !NOT_A_VEHICLE_PHOTO.test(u)) {
       out.photos.push(u);
     }
   }
+  // When the site names this car's photos by its VIN, use exactly those (skips banners, logos
+  // and "similar vehicles").
+  if (vinPhotos.length >= 2) out.photos = vinPhotos;
   const base = pageUrl || undefined;
   const seen = new Set();
   out.photos = out.photos
@@ -136,6 +157,7 @@ export function parseListing(html, pageUrl) {
     .slice(0, 60);
 
   if (out.vin) out.vin = out.vin.toUpperCase();
+  out.trim = cleanTrim(out);
   for (const k of Object.keys(out)) if (out[k] === null || out[k] === undefined || out[k] === '') delete out[k];
   out.listing_url = pageUrl;
   return out;

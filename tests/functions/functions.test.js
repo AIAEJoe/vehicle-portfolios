@@ -134,6 +134,23 @@ test('listing import parses JSON-LD and photos', () => {
   assert.deepEqual(v.photos, ['https://pictures.dealer.com/n/nsb/0001/abc.jpg', 'https://pictures.dealer.com/n/nsb/0001/def.jpg', 'https://pictures.dealer.com/n/nsb/0001/ghi.jpg']);
 });
 
+test('listing import skips dealer promo banners and cleans a full-name trim', () => {
+  const vin = '1G1YB3D45T5107735';
+  const page = `<html><head><script type="application/ld+json">{"@type":"Car","name":"Used 2026 Chevrolet Corvette Stingray 2LT Convertible",
+      "vehicleIdentificationNumber":"${vin}","brand":"Chevrolet","model":"Corvette Stingray","vehicleConfiguration":"Used 2026 Chevrolet Corvette Stingray 2LT Convertible",
+      "bodyType":"Convertible","vehicleModelDate":"2026"}</script></head><body>
+    <img src="https://pictures.dealer.com/n/nsb/0001/${vin}a.jpg"><img src="https://pictures.dealer.com/n/nsb/0001/${vin}b.jpg">
+    <img src="https://pictures.dealer.com/n/nsb/0002/lower-prices-banner.jpg"><img src="https://pictures.dealer.com/n/nsb/0003/specials/start-here.jpg"></body></html>`;
+  const v = parseListing(page, 'https://www.newsmyrnachevy.com/inventory/x/');
+  assert.deepEqual(v.photos, [`https://pictures.dealer.com/n/nsb/0001/${vin}a.jpg`, `https://pictures.dealer.com/n/nsb/0001/${vin}b.jpg`]);
+  assert.equal(v.trim, '2LT');
+
+  // No VIN in the photo names: still drop images named like banners/specials
+  const page2 = page.replaceAll(vin, 'X').replace('"vehicleIdentificationNumber":"X"', `"vehicleIdentificationNumber":"${vin}"`);
+  const v2 = parseListing(page2, 'https://www.newsmyrnachevy.com/inventory/x/');
+  assert.deepEqual(v2.photos, ['https://pictures.dealer.com/n/nsb/0001/Xa.jpg', 'https://pictures.dealer.com/n/nsb/0001/Xb.jpg']);
+});
+
 test('listing import falls back to page text', () => {
   const v = parseListing('<html><head><meta property="og:title" content="2021 Chevrolet Tahoe LT"></head><body>VIN: 1GNSKNKD1MR100001 Stock #: T5521 42,100 miles</body></html>', 'https://x.test/');
   assert.equal(v.vin, '1GNSKNKD1MR100001');
