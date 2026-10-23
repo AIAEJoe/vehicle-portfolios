@@ -315,3 +315,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .bg-print-page .bg-side { margin: 0 auto; break-after: page; page-break-after: always; border: 1pt solid #000; }
   .bg-side, .bg-side * { color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- CHOMES tab (team only) ---------- */
+.ch-chips { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0 8px; }
+@media (max-width: 720px) { .ch-chips { grid-template-columns: repeat(3, 1fr); } }
+.ch-chip { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 10px; text-decoration: none; color: var(--ink-2); background: #f0f2f5; border-left: 4px solid var(--line); min-width: 0; }
+.ch-chip b { font-size: 20px; line-height: 1; color: var(--ink); }
+.ch-chip span { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-chip small { font-size: 12px; color: var(--muted); }
+.ch-chip.ok { border-left-color: var(--ok); }
+.ch-chip.ok small { color: var(--ok); }
+.ch-chip.warn { border-left-color: var(--accent); background: var(--warn-bg); }
+.ch-chip.warn small, .ch-chip.pending small { color: var(--warn); }
+.ch-chip.pending { border-left-color: var(--accent); }
+#chomes section { scroll-margin-top: 70px; }
+#chomes .src { font-size: 12px; color: var(--muted); margin-top: 3px; }
+#chomes textarea { min-height: 64px; }
+.req { color: var(--bad); margin-left: 2px; }
+.tag-internal { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 1px; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.seg-opt { margin: 0; cursor: pointer; }
+.seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.seg-opt span { display: block; padding: 9px 16px; font-weight: 700; color: var(--muted); border-right: 1px solid var(--line); }
+.seg-opt:last-child span { border-right: 0; }
+.seg-opt input:checked + span { background: var(--brand); color: #fff; }
+.seg-opt input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: -3px; }
+.auto-field { background: #f7f8fa; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.auto-field.missing { background: var(--warn-bg); }
+.auto-label { font-size: 13px; font-weight: 700; color: var(--muted); }
+.auto-val { font-size: 18px; font-weight: 800; color: var(--ink); margin-top: 2px; overflow-wrap: anywhere; }
+.pill.ch-below_average { background: var(--ok-bg); color: var(--ok); }
+.pill.ch-average { background: #e5edfb; color: var(--brand); }
+.pill.ch-above_average { background: var(--warn-bg); color: var(--warn); }
+.ch-report { margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line); }
+.ch-save { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin: 0 -4px 10px; background: rgba(255, 255, 255, .96); border-radius: var(--radius); box-shadow: 0 -2px 10px rgba(0, 0, 0, .08); }

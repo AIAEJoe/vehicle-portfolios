@@ -7,6 +7,7 @@ import { adminPage, STATUS_LABEL } from './layout.js';
 import { navigate } from '../router.js';
 import { resizeImage, uploadFile, removeFile } from './media.js';
 import { renderBuyersGuide, resolveGuide, needsBuyersGuide, isShorthand } from '../buyers-guide.js';
+import { chomesTab, chomesBadge, loadChomes } from './chomes-tab.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -14,7 +15,7 @@ const DOC_KINDS = [
   ['brochure', 'Brochure'], ['other', 'Other'],
 ];
 
-const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['guide', 'Buyers Guide'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
+const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['guide', 'Buyers Guide'], ['chomes', 'CHOMES'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
 
 const FULL_CONDITIONS = [
   'Warranty service is provided to anyone who owns the vehicle during the warranty period',
@@ -30,12 +31,13 @@ export default async function vehicleEdit(el, { id }) {
   const { ctx, main } = page;
   const D = ctx.dealership.id;
 
-  let v, staff;
+  let v, staff, chomes;
   async function load() {
     v = must(await sb.from('vehicles').select('*, vehicle_photos(*), vehicle_documents(*)').eq('id', id).eq('dealership_id', D).maybeSingle());
     if (!v) throw new Error('Vehicle not found');
     v.vehicle_photos.sort((a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at)));
     staff = must(await sb.from('staff').select('id,full_name,phone,email,active,user_id').eq('dealership_id', D).order('full_name'));
+    chomes = await loadChomes(v.id).catch((e) => ({ error: e })); // page still works if the CHOMES update isn't installed
   }
   try { await load(); } catch (e) { mount(main, html`<div class="card">${errMsg(e)} <a href="/admin/vehicles">Back</a></div>`); return; }
 
@@ -64,14 +66,14 @@ export default async function vehicleEdit(el, { id }) {
         </div>
       </div>
       ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">This portfolio is a draft. Customers can't open it until you publish.</div>` : ''}
-      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}</button>`)}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}</button>`)}</div>
       <div id="tab"></div>`);
     drawTab();
   }
 
   function drawTab() {
     const box = $('#tab', main);
-    ({ details, photos, documents, guide, shares, recalls })[tab](box);
+    ({ details, photos, documents, guide, chomes: chomesView, shares, recalls })[tab](box);
   }
 
   on(main, 'click', '[data-tab]', (e, b) => {
@@ -154,6 +156,7 @@ export default async function vehicleEdit(el, { id }) {
       try {
         const updated = must(await sb.from('vehicles').update(patch).eq('id', v.id).select().single());
         Object.assign(v, updated);
+        chomes = await loadChomes(v.id).catch((e) => ({ error: e })); // odometer / trim sources may have changed
         toast('Saved');
         frame();
       } catch (err) {
@@ -588,6 +591,15 @@ export default async function vehicleEdit(el, { id }) {
         frame();
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
+  }
+
+  // ---------------------------------------------------------------- CHOMES
+  function chomesView(box) {
+    chomesTab(box, { v, rec: chomes, ctx, staff, onChange: (rec, vehicle) => {
+      chomes = rec;
+      if (vehicle) Object.assign(v, vehicle);
+      frame();
+    } });
   }
 
   // ---------------------------------------------------------------- recalls
