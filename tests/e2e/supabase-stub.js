@@ -92,6 +92,31 @@ function computeStats() {
   });
 }
 
+// Mirrors the CHOMES triggers in 0005_chomes.sql closely enough for the UI: provenance stamps and the review flag.
+const CHOMES_TRACKED = ['overall_grade', 'strengths', 'wear_items', 'needed_work', 'recon_cost', 'inspected_by', 'inspection_date', 'report_provider',
+  'accidents_count', 'accidents_summary', 'service_records', 'prior_owners', 'title_issues', 'title_issue_detail', 'open_recalls', 'history_report_path',
+  'generation_note', 'options_packages', 'highlight_features', 'price_to_market_pct', 'market_days_supply', 'comparable_units_nearby', 'demand_note', 'acquisition_notes'];
+const VEHICLE_TRACKED = { year: 'model_year', mileage: 'odometer', trim: 'trim', drivetrain: 'drivetrain', engine: 'engine' };
+function actor(source) {
+  const s = JSON.parse(localStorage.getItem('stub-session') || 'null');
+  const st = s && db.staff.find((x) => x.user_id === s.user.id);
+  return { source, by: s ? s.user.id : null, by_name: s ? (st ? st.full_name : s.user.email) : null, at: now() };
+}
+function stampChomes(row, before) {
+  if (row.accidents_count === 0 && !row.accidents_summary) row.accidents_summary = 'No accidents reported';
+  for (const k of CHOMES_TRACKED) {
+    if (k in row && JSON.stringify(row[k] ?? null) !== JSON.stringify((before || {})[k] ?? null)) row.provenance = { ...(row.provenance || {}), [k]: actor('staff') };
+  }
+  row.review_required = row.overall_grade === 'fair' || !!String(row.needed_work || '').trim() || !!row.title_issues;
+}
+function stampVehicle(row, before, source) {
+  const c = db.vehicle_chomes && db.vehicle_chomes.find((x) => x.vehicle_id === row.id);
+  if (!c) return;
+  for (const [col, k] of Object.entries(VEHICLE_TRACKED)) {
+    if (row[col] != null && row[col] !== before[col]) c.provenance = { ...(c.provenance || {}), [k]: actor(source) };
+  }
+}
+
 const slugify = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const DEFAULTS = {
   vehicles: (r) => ({ status: 'draft', condition: 'used', features: [], specs: {}, source: 'manual', feed_locked: false, price_label: 'Price',
@@ -101,6 +126,7 @@ const DEFAULTS = {
   leads: () => ({ status: 'new', kind: 'test_drive' }),
   vehicle_photos: () => ({ position: 0, source: 'upload' }),
   vehicle_documents: () => ({ kind: 'other' }),
+  vehicle_chomes: () => ({ options_packages: [], highlight_features: [], provenance: {}, review_required: false }),
 };
 
 class Query {
@@ -131,6 +157,7 @@ class Query {
           const base = { id: uid(), created_at: now(), updated_at: now(), ...p };
           const row = { ...(DEFAULTS[this.table] ? DEFAULTS[this.table](base) : {}), ...base };
           if (this.table === 'vehicles' && db.vehicles.some((v) => v.vin && v.vin === row.vin)) throw new Error('duplicate key value violates unique constraint "vehicles_dealership_id_vin_key"');
+          if (this.table === 'vehicle_chomes') stampChomes(row, {});
           source.push(row);
           if (this.table === 'consent_records') {
             const c = db.customers.find((x) => x.id === row.customer_id);
@@ -143,7 +170,12 @@ class Query {
         rows = source.filter((r) => this.filters.every((f) => f(r)));
         if (this.op === 'update') {
           Object.keys(this.payload).forEach((k) => checkCol(this.table, k));
-          rows.forEach((r) => Object.assign(r, this.payload, { updated_at: now() }));
+          rows.forEach((r) => {
+            const before = { ...r };
+            Object.assign(r, this.payload, { updated_at: now() });
+            if (this.table === 'vehicle_chomes') stampChomes(r, before);
+            if (this.table === 'vehicles') stampVehicle(r, before, 'staff');
+          });
         }
         if (this.op === 'delete') {
           db[this.table] = source.filter((r) => !rows.includes(r));
@@ -195,6 +227,15 @@ export function createClient() {
         return { data: db.dealerships.map((d) => { const p = db.messaging_profiles.find((x) => x.dealership_id === d.id) || {}; const b = db.dealership_billing.find((x) => x.dealership_id === d.id) || {};
           return { id: d.id, slug: d.slug, name: d.name, a2p_status: p.a2p_status, sms_enabled: p.sms_enabled, phone: p.twilio_phone_number, email_domain: p.email_domain, email_domain_status: p.email_domain_status, billing_status: b.status, usage: usageSummary(d.id, true) }; }), error: null };
       }
+      if (fn === 'vp_vehicle_apply_decode') {
+        const v = db.vehicles.find((x) => x.id === args.p_vehicle_id);
+        if (!v) return { data: null, error: { message: 'Vehicle not found' } };
+        const before = { ...v };
+        for (const k of ['year', 'make', 'model', 'trim', 'body_style', 'drivetrain', 'engine', 'transmission', 'fuel_type']) if (v[k] == null && args.p_fields[k]) v[k] = args.p_fields[k];
+        stampVehicle(v, before, 'vin_decode');
+        window.__SAVE();
+        return { data: { ...v }, error: null };
+      }
       if (fn === 'vp_mark_read') { const c = db.customers.find((x) => x.id === args.p_customer_id); c.unread_count = 0; window.__SAVE(); return { data: null, error: null }; }
       if (fn === 'vp_members') return { data: db.dealership_members.map((m) => ({ ...m, email: (db.users.find((u) => u.id === m.user_id) || {}).email })), error: null };
       return { data: null, error: { message: `STUB: unknown rpc ${fn}` } };
@@ -214,14 +255,18 @@ export function createClient() {
       onAuthStateChange: (cb) => { listeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; },
     },
     storage: {
-      from: () => ({
+      from: (bucket) => ({
         upload: async (path, file) => {
           if (!/^[0-9a-f-]{36}\//.test(path)) return { error: { message: 'STUB: bad storage path ' + path } };
-          window.__UPLOADS.push({ path, size: file.size, type: file.type });
+          window.__UPLOADS.push({ bucket, path, size: file.size, type: file.type });
           return { data: { path }, error: null };
         },
         getPublicUrl: (path) => ({ data: { publicUrl: `/seed/jeep-0${(window.__UPLOADS.length % 9) + 1}.jpg?upload=${encodeURIComponent(path)}` } }),
-        remove: async (paths) => { window.__CALLS.push({ removed: paths }); return { error: null }; },
+        remove: async (paths) => { window.__CALLS.push({ removed: paths, bucket }); return { error: null }; },
+        createSignedUrl: async (path, secs) => {
+          window.__CALLS.push({ signed: path, bucket, secs });
+          return bucket === 'internal' ? { data: { signedUrl: `/seed/jeep-01.jpg?signed=${encodeURIComponent(path)}` }, error: null } : { data: null, error: { message: 'STUB: public bucket' } };
+        },
       }),
     },
   };

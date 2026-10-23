@@ -21,18 +21,20 @@ export async function resizeImage(file, maxSide = 1920, quality = 0.85) {
   }
 }
 
-export async function uploadFile(dealershipId, folder, file) {
+// bucket 'internal' is private (team-only files such as history reports): no public URL is returned.
+export async function uploadFile(dealershipId, folder, file, bucket = BUCKET) {
   const ext = (file.name.match(/\.(\w{1,5})$/) || [, file.type.split('/')[1] || 'bin'])[1].toLowerCase();
   const path = `${dealershipId}/${folder}/${uuid()}.${ext}`;
-  const { error } = await sb.storage.from(BUCKET).upload(path, file, {
+  const { error } = await sb.storage.from(bucket).upload(path, file, {
     cacheControl: '31536000', upsert: false, contentType: file.type || undefined,
   });
   if (error) throw error;
+  if (bucket !== BUCKET) return { path, url: null };
   const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
   return { path, url: data.publicUrl };
 }
 
-export async function removeFile(path) {
+export async function removeFile(path, bucket = BUCKET) {
   if (!path) return;
-  await sb.storage.from(BUCKET).remove([path]);
+  await sb.storage.from(bucket).remove([path]);
 }

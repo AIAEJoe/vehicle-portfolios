@@ -1,7 +1,7 @@
 // Browser tests: real UI code against an in-memory Supabase stub and mocked /api routes.
 // Run: node tests/e2e/run.mjs   (uses the globally installed playwright + Chromium)
 import { createRequire } from 'node:module';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -17,7 +17,7 @@ const ORIGIN = 'https://nsbchevy.aiautoengine.com';
 
 // ---- schema from the real migration ----
 function schemaFromSql() {
-  const sql = ['0001_vehicle_portfolios.sql', '0002_messaging_platform.sql', '0003_email_opens.sql', '0004_buyers_guide.sql'].map((f) => readFileSync(join(ROOT, 'supabase/migrations', f), 'utf8')).join('\n');
+  const sql = readdirSync(join(ROOT, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(join(ROOT, 'supabase/migrations', f), 'utf8')).join('\n');
   const out = {};
   for (const m of sql.matchAll(/alter table public\.(\w+)\s+add column if not exists (\w+)/g)) (out['__alter_' + m[1]] ||= []).push(m[2]);
   for (const m of sql.matchAll(/create table if not exists public\.(\w+) \(([\s\S]*?)\n\);/g)) {
@@ -74,6 +74,8 @@ const SEED = {
     recalls: null, created_at: '2026-10-14T12:00:00Z', updated_at: '2026-10-14T12:00:00Z' }],
   vehicle_photos: Array.from({ length: 32 }, (_, i) => ({ id: `p${i}`, vehicle_id: V, dealership_id: D, url: `/seed/jeep-${String(i + 1).padStart(2, '0')}.jpg`, position: i, source: 'url', created_at: '2026-10-14T12:00:00Z' })),
   vehicle_documents: [],
+  vehicle_chomes: [{ vehicle_id: V, dealership_id: D, options_packages: [], highlight_features: [], review_required: false, created_at: '2026-10-23T12:00:00Z', updated_at: '2026-10-23T12:00:00Z',
+    provenance: Object.fromEntries(['model_year', 'odometer', 'trim', 'drivetrain', 'engine'].map((k) => [k, { source: 'existing_record', by: null, by_name: null, at: '2026-10-14T12:00:00Z' }])) }],
   shares: [{ id: 'sh1', code: 'MikeCode', vehicle_id: V, dealership_id: D, staff_id: S, customer_name: 'Mike Smith', customer_phone: '386-555-0100', channel: 'sms', open_count: 2, last_opened_at: new Date(Date.now() - 300000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }],
   portfolio_views: [{ id: 1, vehicle_id: V, dealership_id: D, share_id: 'sh1', visitor_id: 'a', user_agent: 'iPhone', viewed_at: new Date(Date.now() - 300000).toISOString() }],
   leads: [],
@@ -439,6 +441,108 @@ console.log('Dashboard');
     assert(!(await p2.isVisible('#print')), 'toolbar hidden when printing');
     await p2.screenshot({ path: join(SHOTS, '05c-buyers-guide-print.png'), fullPage: true });
     await p2.close();
+  });
+  await step('CHOMES tab: auto-filled Old/Miles/Equipment with sources, missing count on the tab', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
+    await page.waitForSelector('#details');
+    assert((await page.textContent('[data-tab=chomes] .badge')) === '6', 'six required fields to fill');
+    await page.click('[data-tab=chomes]');
+    await page.waitForSelector('#chomes');
+    const t = await page.textContent('#tab');
+    for (const x of ['2018', '8 years', '81,273 mi', '10,159 / yr', 'Average', 'Sport S', 'Four Wheel Drive', 'Already on the vehicle record', 'Market data pending', 'team only'])
+      assert(t.includes(x), x);
+    assert((await page.$$('.ch-chip.warn')).length === 2 && (await page.$$('.ch-chip.ok')).length === 3, 'C and H missing, S pending');
+    assert(!(await page.$('#ch-review')), 'no FTC flag yet');
+  });
+  await page.screenshot({ path: join(SHOTS, '05d-admin-chomes-empty.png'), fullPage: true });
+  await step('CHOMES: validation mirrors the database rules', async () => {
+    await page.click('.seg-opt:has(input[name=title_issues][value=true]) span');
+    assert(await page.isVisible('#ch-title_issue_detail'), 'title detail appears');
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=Describe the title issue');
+    await page.click('.seg-opt:has(input[name=title_issues][value=false]) span');
+    await page.fill('#ch-accidents_count', '1');
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=one-line summary');
+    await page.fill('#ch-highlight_features', 'a\nb\nc\nd\ne\nf');
+    assert((await page.textContent('#ch-hl-count')).includes('Keep it to five'), 'live highlight count');
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=at most five');
+    assert(!(await db()).vehicle_chomes[0].overall_grade, 'nothing saved yet');
+  });
+  await step('CHOMES: full entry saves, records who entered it, flags FTC review for needed work', async () => {
+    await page.click('.seg-opt:has(input[name=overall_grade][value=good]) span');
+    await page.fill('#ch-strengths', 'New tires, clean interior');
+    await page.fill('#ch-wear_items', 'Small scratch on rear bumper');
+    await page.fill('#ch-needed_work', 'Rear brake pads at 3 mm');
+    await page.fill('#ch-recon_cost', '450');
+    await page.fill('#ch-inspected_by', 'Kyleigh Johnson');
+    await page.fill('#ch-inspection_date', new Date().toLocaleDateString('en-CA'));
+    await page.click('.seg-opt:has(input[name=report_provider][value=carfax]) span');
+    await page.fill('#ch-accidents_summary', 'Minor damage, rear bumper, 2021');
+    await page.fill('#ch-prior_owners', '2'); await page.fill('#ch-service_records', '14'); await page.fill('#ch-open_recalls', '0');
+    await page.fill('#ch-generation_note', 'First model year of this generation');
+    await page.click('#ch-from-feed');
+    assert((await page.inputValue('#ch-options_packages')) === 'Four Wheel Drive\nRemovable top', 'options start from listed features');
+    await page.fill('#ch-highlight_features', 'Removable hard top\nTow package\nApple CarPlay');
+    await page.fill('#ch-price_to_market_pct', '97.5'); await page.fill('#ch-market_days_supply', '41'); await page.fill('#ch-comparable_units_nearby', '7');
+    await page.fill('#ch-demand_note', 'Wranglers turn in under 30 days here');
+    await page.fill('#ch-acquisition_notes', 'Trade-in on a 2024 Silverado');
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=CHOMES saved');
+    const c = (await db()).vehicle_chomes[0];
+    assert(c.overall_grade === 'good' && c.recon_cost === 450 && c.accidents_count === 1 && c.title_issues === false && c.report_provider === 'carfax', JSON.stringify(c));
+    assert(c.highlight_features.length === 3 && c.options_packages.length === 2 && c.price_to_market_pct === 97.5, 'lists and numbers');
+    assert(c.provenance.recon_cost.source === 'staff' && c.provenance.recon_cost.by_name === 'owner@nsb.test', JSON.stringify(c.provenance.recon_cost));
+    await page.waitForSelector('#ch-review');
+    const r = await page.textContent('#ch-review');
+    assert(r.includes('Needed work is listed') && r.includes('DEALER WARRANTY'), r);
+    assert(!(await page.$('[data-tab=chomes] .badge')), 'badge gone when complete');
+    assert(!(await page.textContent('#tab')).includes('Market data pending'), 'market data entered');
+    assert((await page.$$('.ch-chip.ok')).length === 6, 'all six complete');
+  });
+  await step('CHOMES: history report goes to the private bucket and opens with a signed link', async () => {
+    await page.setInputFiles('#ch-report', { name: 'carfax-1C4GJXAG5JW150863.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF\n') });
+    await page.waitForSelector('#toast >> text=History report saved');
+    const up = await page.evaluate(() => window.__UPLOADS.at(-1));
+    assert(up.bucket === 'internal' && up.path.startsWith(`${D}/vehicles/${V}/history/`), JSON.stringify(up));
+    const c = (await db()).vehicle_chomes[0];
+    assert(c.history_report_path === up.path && c.history_report_name === 'carfax-1C4GJXAG5JW150863.pdf', JSON.stringify(c));
+    assert(!(await db()).vehicle_documents.some((d) => d.url && d.url.includes('/history/')), 'not added to customer documents');
+    const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#ch-report-open')]);
+    await popup.waitForURL(/signed=/, { timeout: 5000 }); // opens blank first (popup blockers), then the signed link
+    await popup.close();
+  });
+  await page.screenshot({ path: join(SHOTS, '05e-admin-chomes.png'), fullPage: true });
+  await step('CHOMES: the customer page never loads or shows CHOMES data', async () => {
+    const p2 = await context.newPage();
+    await p2.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await p2.waitForSelector('h1.hero-title');
+    const t = await p2.textContent('body');
+    for (const x of ['Rear brake pads', 'Trade-in on a 2024', 'Wranglers turn', 'CHOMES', 'carfax-1C4G']) assert(!t.includes(x), 'leaked: ' + x);
+    const calls = await p2.evaluate(() => window.__CALLS.filter((c) => c.table === 'vehicle_chomes' || c.signed));
+    assert(!calls.length, 'portfolio queried CHOMES');
+    await p2.close();
+  });
+  await step('CHOMES: Decode VIN fills only the empty basics and labels them', async () => {
+    const id = '9d2c1f1e-0000-4000-8000-0000000000f1';
+    await page.evaluate(({ id, D }) => {
+      window.__DB.vehicles.push({ id, dealership_id: D, slug: '2021-chevrolet-tahoe', status: 'draft', condition: 'used', vin: '1GNSKNKD1MR100001', year: 2021, make: 'Chevrolet', model: 'Tahoe',
+        trim: null, engine: null, drivetrain: 'Four Wheel Drive', mileage: 61000, features: [], specs: {}, source: 'manual', created_at: '2026-10-20T12:00:00Z' });
+      window.__DB.vehicle_chomes.push({ vehicle_id: id, dealership_id: D, options_packages: [], highlight_features: [], provenance: {}, review_required: false });
+      window.__SAVE();
+    }, { id, D });
+    await page.goto(`${ORIGIN}/admin/vehicles/${id}#chomes`);
+    await page.waitForSelector('#ch-decode');
+    await page.click('#ch-decode');
+    await page.waitForSelector('#toast >> text=Filled trim, engine');
+    const v = (await db()).vehicles.find((x) => x.id === id);
+    assert(v.trim === 'LT' && v.engine === '5.3L V8' && v.drivetrain === 'Four Wheel Drive', JSON.stringify(v));
+    const c = (await db()).vehicle_chomes.find((x) => x.vehicle_id === id);
+    assert(c.provenance.trim.source === 'vin_decode' && !c.provenance.drivetrain, JSON.stringify(c.provenance));
+    assert((await page.textContent('#tab')).includes('VIN decode'), 'source shown');
+    assert(!(await page.$('#ch-decode')), 'decode button gone once filled');
+    await page.evaluate((id) => { window.__DB.vehicles = window.__DB.vehicles.filter((x) => x.id !== id); window.__DB.vehicle_chomes = window.__DB.vehicle_chomes.filter((x) => x.vehicle_id !== id); window.__SAVE(); }, id);
   });
   await step('settings: Buyers Guide complaint contact and default', async () => {
     await page.goto(`${ORIGIN}/admin/settings`);

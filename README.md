@@ -22,6 +22,7 @@ There is no build step and no runtime npm dependencies.
 | **Open tracking** | Each customer gets a personal link. When they open it, the salesperson gets a text and an email. Every open is logged. Link-preview robots, refreshes, and staff viewing their own links don't count. |
 | **Dealer dashboard** `/admin` | Vehicles (add by listing URL, VIN, HomeNet/vAuto feed, or by hand), photos, documents, QR window cards, sharing, **Inbox**, leads, staff, **Usage**, Settings → **Texting & email**. |
 | **Inbox** | Two-way texts and emails with each customer. Shows delivery status (✓ sent, ✓✓ delivered, ⚠ failed), the consent timeline, the assigned salesperson, and a "Do not text" button. |
+| **CHOMES** (vehicle's page → CHOMES tab) | Team-only vehicle story for every used/CPO car: Condition, History, Old, Miles, Equipment, Supply & demand. Old/Miles/Equipment fill in automatically, with where each value came from. Flags records that need an FTC consistency check. |
 | **Leads** | Saved to the database and emailed to the store and the salesperson. Sent to **Elead as ADF/XML**. The salesperson also gets a text. |
 | **Inventory** | HomeNet/vAuto CSV feed synced hourly, by HTTPS URL, relay upload, or manual upload. |
 | **Platform console** `/platform` | For you: every dealership with usage, **provider cost, invoice and margin**; plan and allowance per dealership; **10DLC onboarding runner**; email domains; rate card. |
@@ -78,7 +79,28 @@ Every used and certified pre-owned vehicle page shows the Buyers Guide (front an
 - No terms and no dealership default: the guide shows **AS IS** and the vehicle is flagged "Warranty data pending" in the dashboard only.
 - Dealership-wide settings (Settings → FTC Buyers Guide): complaints contact, default disclosure, service contracts, optional signature line.
 
-## Costs and the $995 subscription
+## CHOMES vehicle story (phase 1: team entry)
+
+CHOMES (Condition, History, Old, Miles, Equipment, Supply and demand) was created by **Jonathan Dawson and Sellchology**. Every used and certified vehicle gets a CHOMES record, entered once by the store team on the vehicle's **CHOMES** tab. The tab badge counts the required fields still empty.
+
+| Letter | Where the values come from |
+|---|---|
+| **C** Condition | Typed in at the store: grade (Excellent/Good/Fair, required), strengths, wear, needed work + recon cost, inspected by and date (required). |
+| **H** History | Keyed in from the CARFAX or AutoCheck report: provider, accidents (count + one-line summary), title issues (required), service records, owners, open recalls. The report PDF is stored in a **private** bucket and opened with a 5-minute signed link. |
+| **O** Old | Model year from the vehicle record (feed, VIN decode or Details tab). Age is calculated. Generation note is typed. |
+| **M** Miles | Odometer from the vehicle record. Miles per year and below/average/above (average = 10,000–15,000 a year) are calculated. |
+| **E** Equipment | Trim, drivetrain and engine from the vehicle record. Options/packages (can start from the feed's feature list) and 3–5 highlight features are typed. |
+| **S** Supply & demand | Typed for now, with a "Market data pending" flag until the vAuto pipeline (phase 2) fills them. |
+
+- **Privacy.** CHOMES lives in its own table, `vehicle_chomes`, readable only by that dealership's staff. Unlike `vehicles`, it is never public. Recon cost, acquisition notes and the demand note are internal by design; `customerSafe()` in `public/js/chomes.js` strips them for the future customer panel.
+- **One odometer.** Old/Miles/Equipment basics aren't copied into CHOMES; they're read from the vehicle record, so the CHOMES story and the customer page can't disagree.
+- **Provenance.** Every value records who or what supplied it and when (`provenance`): staff (with their name), inventory feed, VIN decode, listing import, or "already on the vehicle record" for vehicles that existed before CHOMES. Database triggers write it; staff can't edit it.
+- **Decode VIN** on the CHOMES tab fills only the vehicle's empty basics and labels them "VIN decode".
+- **FTC consistency.** A Fair grade, listed needed work or a title issue sets `review_required`. The tab then shows which Buyers Guide is in effect and that both must tell the same truth. Clearing the review is admin-only, and editing the condition or title facts re-opens it. Phase 4 adds the customer story panel and blocks it from publishing until the review is cleared. The Buyers Guide itself is never paraphrased.
+
+Still to build: phase 2 (S from vAuto), phase 3 (parse the history report PDF), phase 4 (customer VDP story panel + publish gate).
+
+
 
 Default rates are Twilio's published US long-code pricing and 10DLC fees, checked in October 2026. You can edit them under **Platform → Rates & plans**.
 
@@ -120,6 +142,7 @@ Per-dealership plan options:
    - `supabase/migrations/0001_vehicle_portfolios.sql`
    - `supabase/migrations/0002_messaging_platform.sql`
    - `supabase/seed.sql`
+   - `supabase/migrations/0005_chomes.sql` (CHOMES). On an existing install, run `supabase/run-2026-10-23.sql` instead; it's the same and safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -189,10 +212,11 @@ If you register a dealership in the Twilio Console instead, paste the SIDs under
 ## Tests
 
 ```bash
-bash tests/sql/run.sh                  # 96 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync
-node --test tests/functions/*.test.js  # 48 tests: webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
+bash tests/sql/run.sh                  # 154 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
+                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review
+node --test tests/functions/*.test.js  # 62 tests (incl. CHOMES calculations): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 46 browser checks: portfolio, consent box, terms page, dashboard, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 61 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.
