@@ -760,6 +760,25 @@ console.log('Dashboard');
       'Standard', 'Exterior', 'Interior', 'Safety', 'Daytime Running Lights', 'Passenger Airbag', 'Tires: 225/55R18']) assert(t.includes(x), x);
     assert((await page.$$('.ws-equip-col')).length === 4, 'four equipment lists');
     assert(await pdfPages(page) === 1, 'sticker with full equipment lists prints on one letter page');
+    // A loaded car (like the Corvette 3LT: long Interior list, options, long fields, long disclaimer) still prints on ONE page.
+    await page.evaluate((T) => {
+      const f = window.__DB.vehicle_factory_data.find((x) => x.vehicle_id === T).data;
+      f.features = [...f.features, { group: 'Seats', items: Array.from({ length: 30 }, (_, i) => `GT2 bucket seat feature number ${i + 1} with a longer description`) },
+        { group: 'Safety', items: Array.from({ length: 20 }, (_, i) => `Driver assistance item ${i + 1}`) }];
+      f.optional = Array.from({ length: 6 }, (_, i) => ({ name: `3LT PREFERRED EQUIPMENT GROUP PART ${i + 1}` }));
+      const v = window.__DB.vehicles.find((x) => x.id === T);
+      v.interior_color = '(Full color interior (instrument panel, doors and carpet.))';
+      window.__DB.dealerships[0].sticker_disclaimer = 'Prices exclude tax, tag, title and dealer fees. '.repeat(4);
+      window.__SAVE();
+    }, T);
+    await page.reload();
+    await page.waitForSelector('.ws');
+    await page.waitForTimeout(300);
+    assert(await pdfPages(page) === 1, 'a heavily loaded sticker still prints on one letter page');
+    assert((await page.textContent('.ws')).includes('GT2 bucket seat feature number 30'), 'nothing dropped to make it fit');
+    await page.screenshot({ path: join(SHOTS, '05j-sticker-loaded.png'), fullPage: true });
+    // with the browser's default margins (headers and footers on) Chrome still honours our @page size and margin
+    await page.emulateMedia({ media: 'screen' });
     await page.click('[data-bw="1"]');
     assert(await page.$('.ws.ws-bw'), 'black & white mode');
     const head = await page.$eval('.ws-head', (e) => getComputedStyle(e).backgroundColor);
