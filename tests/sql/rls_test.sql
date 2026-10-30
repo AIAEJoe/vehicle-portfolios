@@ -152,7 +152,9 @@ begin
   perform pg_temp.check((select model from vehicles where vin='1GCUYDED5RZ100001') = 'Silverado 1500', 'blank feed fields keep existing values');
   perform pg_temp.check((select status from vehicles where vin='1GCUYDED5RZ100002') = 'sold', 'missing unit sold');
   perform pg_temp.check((select status from vehicles where vin='1C4GJXAG5JW150863') = 'published', 'manual vehicle untouched');
-  perform pg_temp.check((select count(*) from vehicle_photos p join vehicles v on v.id=p.vehicle_id where v.vin='1GCUYDED5RZ100001') = 3, 'feed photos replaced, upload kept');
+  perform pg_temp.check((select count(*) from vehicle_photos p join vehicles v on v.id=p.vehicle_id where v.vin='1GCUYDED5RZ100001') = 1
+    and exists (select 1 from vehicle_photos p join vehicles v on v.id=p.vehicle_id where v.vin='1GCUYDED5RZ100001' and p.source='upload'),
+    'once the car has photographer photos, a changed feed photo list is not re-added (0013); the upload is kept');
 
   -- comes back + locked behaviour
   update vehicles set feed_locked = true, price = 1 where vin = '1GCUYDED5RZ100001';

@@ -15,6 +15,7 @@ import { onRequestPost as trackPost } from '../../functions/api/track.js';
 import { onRequestPost as ingestPost } from '../../functions/api/inventory/ingest.js';
 import { onRequestPost as syncPost } from '../../functions/api/inventory/sync.js';
 import { onRequestPost as invitePost } from '../../functions/api/invite.js';
+import { onRequestGet as photoFeedGet } from '../../functions/api/feeds/photos.js';
 
 const ENV = {
   SUPABASE_URL: 'https://proj.supabase.co', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service',
@@ -428,4 +429,49 @@ test('SFTP webhook rejects bad signatures and ignores non-feed events', async ()
   const r2 = await sftpPost(ctx(req('https://x.aiautoengine.com/api/inventory/sftp', { method: 'POST', body: folder, headers: { 'x-hub-signature': await hubSig('Very Secret Secret', folder) } }), { env: SFTP_ENV }));
   assert.equal(r2.status, 204);
   assert.equal(sent('s3.amazonaws.com').length, 0, 'folders are not downloaded');
+});
+
+// ---------- photo feed for third-party sites ----------
+function mockPhotoFeed(store = {}) {
+  mock((u) => u.includes('/rest/v1/dealerships'), () => [DEALER]);
+  mock((u) => u.includes('/rest/v1/dealership_settings'), () => [{ photo_feed_token: 'photo-token', feed_ingest_token: 'secret-token' }]);
+  mock((u) => u.includes('/rest/v1/vehicles?'), (u) => { store.vehicles = u; return [
+    { id: 'v1', vin: '1G1YC3D46P5136227', stock_number: '5302353A', year: 2023, make: 'Chevrolet', model: 'Corvette', trim: '3LT, "Z51"', condition: 'used' },
+    { id: 'v2', vin: '1GCUYDED5RZ100001', stock_number: 'N1', year: 2024, make: 'Chevrolet', model: 'Silverado 1500', trim: 'LT', condition: 'new' },
+    { id: 'v3', vin: null, stock_number: 'NOVIN', year: 2020, make: 'Ford', model: 'F-150', condition: 'used' }]; });
+  mock((u) => u.includes('/rest/v1/vehicle_photos?'), (u) => { store.photos = u; return [
+    { vehicle_id: 'v1', url: 'https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/b.jpg', position: 1, created_at: '2026-10-30T15:00:00Z' },
+    { vehicle_id: 'v1', url: 'https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/a.jpg', position: -2, created_at: '2026-10-30T16:00:00Z' },
+    { vehicle_id: 'v3', url: 'https://x/c.jpg', position: 0, created_at: '2026-10-30T15:00:00Z' }]; });
+}
+
+test('photo feed: CSV of shot cars, photos in display order, uploads only, published only', async () => {
+  const store = {};
+  mockPhotoFeed(store);
+  const res = await photoFeedGet(ctx(req('https://nsbchevy.aiautoengine.com/api/feeds/photos?token=photo-token')));
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/csv/);
+  const lines = (await res.text()).trim().split('\r\n');
+  assert.equal(lines[0], 'VIN,StockNumber,Year,Make,Model,Trim,Type,PhotoCount,PhotosUpdated,PhotoURLs');
+  assert.equal(lines.length, 2, 'only cars with photographer photos and a VIN');
+  assert.equal(lines[1], '1G1YC3D46P5136227,5302353A,2023,Chevrolet,Corvette,"3LT, ""Z51""",Used,2,2026-10-30T16:00:00Z,"https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/a.jpg,https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/b.jpg"');
+  assert.match(store.vehicles, /status=eq\.published/);
+  assert.match(store.photos, /source=eq\.upload/);
+});
+
+test('photo feed: pipe separator and JSON', async () => {
+  mockPhotoFeed();
+  const csv = await (await photoFeedGet(ctx(req('https://nsbchevy.aiautoengine.com/api/feeds/photos?token=photo-token&sep=pipe')))).text();
+  assert.match(csv, /"[^"]*a\.jpg\|[^"]*b\.jpg"/);
+  const j = await (await photoFeedGet(ctx(req('https://nsbchevy.aiautoengine.com/api/feeds/photos?token=photo-token&format=json')))).json();
+  assert.equal(j.vehicles.length, 1);
+  assert.equal(j.vehicles[0].photos[0].endsWith('/a.jpg'), true);
+});
+
+test('photo feed: the inventory token or no token is refused', async () => {
+  mockPhotoFeed();
+  for (const t of ['secret-token', '', 'photo-tokem']) {
+    const res = await photoFeedGet(ctx(req(`https://nsbchevy.aiautoengine.com/api/feeds/photos?token=${t}`)));
+    assert.equal(res.status, 401, t);
+  }
 });
