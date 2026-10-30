@@ -30,6 +30,28 @@ function schemaFromSql() {
 }
 const SCHEMA = schemaFromSql();
 
+// A factory (Monroney-style) sticker PDF with two columns, built with pdf-lib, for the "read options" test.
+const { PDFDocument, StandardFonts } = require(join(execSync('npm root -g').toString().trim(), 'pdf-lib'));
+const FACTORY_PDF = await (async () => {
+  const doc = await PDFDocument.create();
+  const pg = doc.addPage([612, 792]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const t = (str, x, y, size = 9) => pg.drawText(str, { x, y, size, font });
+  t('2024 CHEVROLET TAHOE LT', 40, 740, 14);
+  t('STANDARD VEHICLE PRICE', 40, 715); t('$58,195.00', 220, 715);
+  t('STANDARD EQUIPMENT', 40, 690, 10); t('OPTIONAL EQUIPMENT', 320, 690, 10);
+  t('Remote start', 40, 672); t('Z71 OFF-ROAD PACKAGE', 320, 672); t('$1,195.00', 520, 672);
+  t('Heated front seats', 40, 658); t('Skid plates, hill descent control', 330, 658);
+  t('Apple CarPlay', 40, 644); t('SUMMIT WHITE', 320, 644); t('N/C', 520, 644);
+  t('TECHNOLOGY PACKAGE', 320, 630); t('$2,050.00', 520, 630);
+  t('MAX TRAILERING PACKAGE', 320, 616); t('$495.00', 520, 616);
+  t('TOTAL OPTIONS', 320, 590); t('$3,740.00', 520, 590);
+  t('DESTINATION CHARGE', 320, 576); t('$1,995.00', 520, 576);
+  t('FUEL ECONOMY AND ENVIRONMENT', 40, 520, 11);
+  return Buffer.from(await doc.save());
+})();
+const PDFJS_DIR = join(execSync('npm root -g').toString().trim(), 'pdfjs-dist/build');
+
 // ---- seed data (mirrors supabase/seed.sql) ----
 const D = '9d2c1f1e-0000-4000-8000-000000000001';
 const S = '9d2c1f1e-0000-4000-8000-0000000000aa';
@@ -102,6 +124,7 @@ async function setup(context) {
   await context.route('https://cdn.jsdelivr.net/npm/@supabase/**', (r) => r.fulfill({ contentType: 'text/javascript', body: stub }));
   await context.route('https://cdn.jsdelivr.net/npm/qrcode-generator**', (r) => r.fulfill({ contentType: 'text/javascript', body: qrStub }));
   await context.route('https://maps.google.com/**', (r) => r.abort());
+  await context.route('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/*', (r) => r.fulfill({ contentType: 'text/javascript', body: readFileSync(join(PDFJS_DIR, new URL(r.request().url()).pathname.split('/').pop())) }));
   // A Dealer Inspire page like the real site: lazy-loaded gallery, photos named by VIN, "similar vehicles" with other VINs
 
   const corvette = `<!doctype html><html><head><title>Pre-Owned 1993 Chevrolet Corvette 2DR CPE Coupe | NSB Chevy</title>
@@ -162,6 +185,14 @@ async function setup(context) {
       const b = route.request().postDataJSON(); api.dealers.push(b);
       return json(route, { ok: true, dealership: { id: D, name: b.name }, invited: b.owner_email || null });
     }
+    if (p === '/api/window-sticker') {
+      const b = route.request().postDataJSON();
+      api.stickers = (api.stickers || 0) + 1;
+      assert(route.request().headers().authorization, 'sticker lookup sends auth');
+      if (b.vehicle_id !== V) return json(route, { error: "Toyota doesn't publish original window stickers online." }, 422);
+      return json(route, { ok: true, from: 'GM', document: { id: 'fws', vehicle_id: V, dealership_id: D, kind: 'window_sticker', source: 'oem', title: 'Original factory window sticker', url: `${ORIGIN}/test/factory-sticker.pdf?v=1`, storage_path: 'x' } });
+    }
+    if (p === '/test/factory-sticker.pdf') return route.fulfill({ contentType: 'application/pdf', body: FACTORY_PDF, headers: { 'access-control-allow-origin': '*' } });
     if (p.startsWith('/api/')) return json(route, { error: 'not mocked' }, 404);
     const file = join(PUB, p);
     if (p !== '/' && existsSync(file) && extname(file)) return route.fulfill({ body: readFileSync(file), contentType: TYPES[extname(file)] || 'application/octet-stream' });
@@ -543,6 +574,98 @@ console.log('Dashboard');
     assert((await page.textContent('#tab')).includes('VIN decode'), 'source shown');
     assert(!(await page.$('#ch-decode')), 'decode button gone once filled');
     await page.evaluate((id) => { window.__DB.vehicles = window.__DB.vehicles.filter((x) => x.id !== id); window.__DB.vehicle_chomes = window.__DB.vehicle_chomes.filter((x) => x.vehicle_id !== id); window.__SAVE(); }, id);
+  });
+  await step('window sticker tab: pricing stack checks rebates and offers to fix the price', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#sticker`);
+    await page.waitForSelector('#stack-form');
+    assert((await page.textContent('.st-checks')).includes('No pricing stack'), 'checklist');
+    await page.fill('#st-base', '19995');
+    await page.click('#st-add');
+    await page.fill('[data-i="0"][data-k=label]', 'Dealer discount'); await page.fill('[data-i="0"][data-k=amount]', '1500');
+    await page.click('#st-add');
+    await page.selectOption('[data-i="1"][data-k=kind]', 'rebate');
+    await page.fill('[data-i="1"][data-k=label]', 'Military rebate'); await page.fill('[data-i="1"][data-k=amount]', '500');
+    await page.click('#st-add');
+    await page.selectOption('[data-i="2"][data-k=kind]', 'addon');
+    await page.fill('[data-i="2"][data-k=label]', 'Ceramic tint'); await page.fill('[data-i="2"][data-k=amount]', '299');
+    assert((await page.textContent('#st-total')).includes('$18,294'), 'live total');
+    await page.click('#stack-form button[type=submit]');
+    await page.waitForSelector('#toast >> text=who qualifies');
+    await page.fill('[data-i="1"][data-k=note]', 'Active duty and veterans');
+    await page.click('#st-setprice');
+    await page.waitForSelector('#toast >> text=Price updated');
+    const v = (await db()).vehicles[0];
+    assert(v.price === 18294 && v.price_stack_base === 19995 && v.price_stack.length === 3, JSON.stringify(v.price_stack));
+    assert(JSON.stringify(v.price_stack.map((l) => l.amount)) === '[-1500,-500,299]' && v.price_stack[1].note === 'Active duty and veterans', 'signed amounts');
+    await page.waitForSelector('.st-checks >> text=Pricing stack adds up');
+    assert((await page.textContent('.st-checks')).includes('held until the FTC review'), 'CHOMES story held (needed work listed)');
+  });
+  await step('settings: sticker disclaimer', async () => {
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.fill('#s-sticker_disclaimer', 'Prices exclude tax, tag, title and dealer fees.');
+    await page.click('#ws button');
+    await page.waitForSelector('#toast >> text=Window sticker settings saved');
+  });
+  await step('printed sticker: pricing stack, QR, Buyers Guide pointer; CHOMES story held for FTC review', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
+    await page.waitForSelector('.ws');
+    const t = await page.textContent('.ws');
+    for (const x of ['Pre-Owned', '2018 Jeep Wrangler Sport S', 'Retail price', '$19,995', 'Dealer discount', '−$1,500', 'Active duty and veterans', '+$299', '$18,294', 'You save $2,000',
+      'Removable hard top', 'Four Wheel Drive', 'see the FTC Buyers Guide displayed on this vehicle', 'Prices exclude tax, tag, title and dealer fees.', 'VIN 1C4GJXAG5JW150863'])
+      assert(t.includes(x), x);
+    assert(!t.includes('Vehicle story') && !t.includes('CHOMES'), 'story held');
+    assert((await page.textContent('main')).includes('until the FTC consistency review is cleared'), 'staff told why');
+    assert(await page.$('.ws-qr svg[data-qr*="?s="]'), 'QR to the tracked vehicle page');
+    for (const bad of ['Rear brake pads', 'Trade-in', 'Wranglers turn', '450', 'warranty for', 'Monroney']) assert(!t.includes(bad), 'should not print: ' + bad);
+  });
+  await step('printed sticker: story prints once the review is cleared; no internal fields', async () => {
+    await page.evaluate(() => { window.__DB.vehicle_chomes[0].review_cleared_at = new Date().toISOString(); window.__SAVE(); });
+    await page.reload();
+    await page.waitForSelector('.ws-story');
+    const t = await page.textContent('.ws');
+    for (const x of ['Vehicle story', '8 years old', 'a year · average for its age', '2 prior owners (CARFAX report)', '1 reported: Minor damage, rear bumper, 2021 (CARFAX report)',
+      '14 service records', 'Jonathan Dawson and Sellchology', 'Four Wheel Drive']) assert(t.includes(x), x);
+    for (const bad of ['Rear brake pads', 'Trade-in', 'Wranglers turn', '$450']) assert(!t.includes(bad), 'leaked ' + bad);
+    await page.emulateMedia({ media: 'print' });
+    assert(!(await page.isVisible('.admin-top')) && !(await page.isVisible('.page-head')), 'chrome hidden when printing');
+    const box = await page.$eval('.ws', (e) => e.getBoundingClientRect());
+    assert(Math.abs(box.width - 7.8 * 96) < 2 && box.height <= 10.35 * 96, `fits letter: ${box.width}x${box.height}`);
+    await page.emulateMedia({ media: 'screen' });
+  });
+  await page.setViewportSize({ width: 900, height: 1200 });
+  await page.screenshot({ path: join(SHOTS, '05f-window-sticker.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await step('factory sticker: lookup, then option packages read off the PDF into CHOMES', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#sticker`);
+    await page.click('#st-find');
+    await page.waitForSelector('#toast >> text=Found the original sticker (GM)');
+    assert((await page.textContent('#factory')).includes('From the manufacturer'), 'factory card');
+    await page.click('[data-goto=chomes]');
+    await page.waitForSelector('#ch-from-sticker');
+    await page.click('#ch-from-sticker');
+    await page.waitForSelector('#ch-add-opts, #ch-sticker-opts .notice', { timeout: 15000 });
+    assert(await page.$('#ch-add-opts'), await page.textContent('#ch-sticker-opts'));
+    const found = await page.$$eval('#ch-sticker-opts label', (ls) => ls.map((l) => l.textContent.trim()));
+    assert(JSON.stringify(found) === JSON.stringify(['Z71 Off-Road Package', 'Summit White', 'Technology Package', 'Max Trailering Package']), JSON.stringify(found));
+    await page.uncheck('[data-opt="1"]');
+    await page.click('#ch-add-opts');
+    assert((await page.inputValue('#ch-options_packages')) === 'Four Wheel Drive\nRemovable top\nZ71 Off-Road Package\nTechnology Package\nMax Trailering Package', await page.inputValue('#ch-options_packages'));
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=CHOMES saved');
+    assert((await db()).vehicle_chomes[0].options_packages.includes('Max Trailering Package'), 'saved');
+  });
+  await step('a price change makes the stack stop printing until it is updated', async () => {
+    await page.evaluate(() => { window.__DB.vehicles[0].price = 18995; window.__SAVE(); });
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#sticker`);
+    await page.waitForSelector('[data-tab=sticker] .badge');
+    assert((await page.textContent('.st-checks')).includes("Pricing stack won't print"), 'warned');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
+    await page.waitForSelector('.ws');
+    const t = await page.textContent('.ws');
+    assert(t.includes('$18,995') && !t.includes('Dealer discount') && !t.includes('You save'), 'stale stack hidden');
+    assert((await page.textContent('main')).includes("The pricing stack isn't printed"), 'staff told why');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
+    await page.waitForSelector('#details');
   });
   await step('settings: Buyers Guide complaint contact and default', async () => {
     await page.goto(`${ORIGIN}/admin/settings`);

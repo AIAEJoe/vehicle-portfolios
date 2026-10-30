@@ -349,3 +349,58 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pill.ch-above_average { background: var(--warn-bg); color: var(--warn); }
 .ch-report { margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--line); }
 .ch-save { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin: 0 -4px 10px; background: rgba(255, 255, 255, .96); border-radius: var(--radius); box-shadow: 0 -2px 10px rgba(0, 0, 0, .08); }
+
+/* ---------- Window sticker tab ---------- */
+.st-checks { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; font-size: 15px; }
+.st-checks .ok { color: var(--ok); } .st-checks .warn { color: var(--warn); font-weight: 600; } .st-checks .muted { color: var(--muted); }
+.st-line { display: grid; grid-template-columns: 130px 1fr 150px auto; gap: 8px; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.st-line .st-note { grid-column: 2 / 4; }
+.st-amt { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+@media (max-width: 560px) { .st-line { grid-template-columns: 1fr 1fr auto; } .st-line > input[data-k=label] { grid-column: 1 / -1; grid-row: 2; } .st-line .st-note { grid-column: 1 / -1; } }
+.st-total { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 12px; font-size: 16px; }
+.st-total .ok { color: var(--ok); font-weight: 700; } .st-total .warn { color: var(--warn); font-weight: 600; }
+
+/* ---------- Printed dealer window sticker (US Letter) ---------- */
+.ws { --ws-ink: #111; width: 7.8in; min-height: 10.3in; margin: 0 auto 24px; background: #fff; color: var(--ws-ink); border: 1px solid var(--line); display: flex; flex-direction: column; font-size: 11.5pt; line-height: 1.35; }
+.ws h2 { font-size: 10pt; text-transform: uppercase; letter-spacing: .06em; color: var(--ws-brand); border: 0; border-bottom: 2px solid var(--ws-accent); padding: 0 0 3px; margin: 16px 0 8px; }
+.ws-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; background: var(--ws-brand); color: #fff; padding: 0.18in 0.3in; }
+.ws-head img { height: 0.62in; max-width: 3.2in; object-fit: contain; background: #fff; border-radius: 6px; padding: 4px 8px; }
+.ws-dealer { font-size: 18pt; }
+.ws-contact { text-align: right; font-size: 9.5pt; line-height: 1.35; }
+.ws-title { padding: 0.18in 0.3in 0.12in; border-bottom: 1px solid #ddd; }
+.ws-kicker { font-size: 10pt; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--ws-brand); }
+.ws-title h1 { font-size: 24pt; margin: 2px 0 4px; color: var(--ws-ink); line-height: 1.1; }
+.ws-ids { font-size: 10pt; color: #333; font-variant-numeric: tabular-nums; white-space: pre-wrap; }
+.ws-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3in; padding: 0.06in 0.3in 0.1in; flex: 1; }
+.ws-price { border: 2px solid var(--ws-ink); border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+.ws-pl { font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.ws-big { font-size: 34pt; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ws-stack { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ws-stack td { padding: 3px 0; vertical-align: top; }
+.ws-stack td:last-child { text-align: right; white-space: nowrap; padding-left: 10px; font-weight: 700; }
+.ws-stack small { display: block; font-size: 8.5pt; color: #444; }
+.ws-stack tr.discount td:last-child, .ws-stack tr.rebate td:last-child { color: #0b6b2f; }
+.ws-stack .ws-final td { border-top: 2px solid var(--ws-ink); padding-top: 6px; font-size: 18pt; font-weight: 900; }
+.ws-save { margin-top: 4px; font-weight: 800; color: #0b6b2f; }
+.ws-fees { margin-top: 8px; font-size: 8.5pt; color: #333; }
+.ws-qr { display: flex; gap: 12px; align-items: center; margin-top: 14px; }
+.ws-qr svg { width: 1.45in; height: 1.45in; flex: none; }
+.ws-qr strong { display: block; font-size: 12pt; }
+.ws-qr span { font-size: 9.5pt; color: #333; }
+.ws-specs, .ws-story { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 10.5pt; }
+.ws-specs dt, .ws-story dt { font-weight: 700; color: #333; }
+.ws-specs dd, .ws-story dd { margin: 0; }
+.ws-hl { margin: 0; padding: 0; list-style: none; columns: 1; font-size: 12pt; font-weight: 700; }
+.ws-hl li { padding: 3px 0 3px 18px; position: relative; } .ws-hl li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 8px; height: 8px; background: var(--ws-accent); border-radius: 2px; }
+.ws-opts { margin: 0; padding-left: 18px; font-size: 10.5pt; }
+.ws-foot { padding: 0.12in 0.3in 0.2in; border-top: 1px solid #ddd; font-size: 8.5pt; color: #222; }
+.ws-foot p { margin: 0 0 3px; }
+.ws-credit { color: #555; }
+@media print {
+  @page { size: letter portrait; margin: 0.35in; }
+  .admin-top, .no-print, .page-head { display: none !important; }
+  .admin-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  body { background: #fff; }
+  .ws { border: 0; margin: 0; width: 7.8in; min-height: 10.25in; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@media screen and (max-width: 8.4in) { .ws { zoom: .46; } }

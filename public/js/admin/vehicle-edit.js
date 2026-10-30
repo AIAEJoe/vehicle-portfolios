@@ -8,6 +8,7 @@ import { navigate } from '../router.js';
 import { resizeImage, uploadFile, removeFile } from './media.js';
 import { renderBuyersGuide, resolveGuide, needsBuyersGuide, isShorthand } from '../buyers-guide.js';
 import { chomesTab, chomesBadge, loadChomes } from './chomes-tab.js';
+import { stickerTab, stickerBadge } from './sticker-tab.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -15,7 +16,7 @@ const DOC_KINDS = [
   ['brochure', 'Brochure'], ['other', 'Other'],
 ];
 
-const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['guide', 'Buyers Guide'], ['chomes', 'CHOMES'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
+const TABS = [['details', 'Details'], ['photos', 'Photos'], ['documents', 'Documents'], ['guide', 'Buyers Guide'], ['chomes', 'CHOMES'], ['sticker', 'Window sticker'], ['shares', 'Share & activity'], ['recalls', 'Recalls']];
 
 const FULL_CONDITIONS = [
   'Warranty service is provided to anyone who owns the vehicle during the warranty period',
@@ -62,18 +63,19 @@ export default async function vehicleEdit(el, { id }) {
             : html`<button class="btn accent sm" data-status="published">Publish</button>`}
           <a class="btn alt sm" href="${url}" target="_blank" data-external>Preview</a>
           <button class="btn alt sm" id="copy">Copy link</button>
+          <a class="btn alt sm" href="/admin/vehicles/${v.id}/sticker">Window sticker</a>
           <a class="btn alt sm" href="/admin/vehicles/${v.id}/print">QR window card</a>
         </div>
       </div>
       ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">This portfolio is a draft. Customers can't open it until you publish.</div>` : ''}
-      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}</button>`)}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}${k === 'sticker' && stickerBadge(v) ? html`<span class="badge" title="The pricing stack doesn't match the price, so it won't print">!</span>` : ''}</button>`)}</div>
       <div id="tab"></div>`);
     drawTab();
   }
 
   function drawTab() {
     const box = $('#tab', main);
-    ({ details, photos, documents, guide, chomes: chomesView, shares, recalls })[tab](box);
+    ({ details, photos, documents, guide, chomes: chomesView, sticker: stickerView, shares, recalls })[tab](box);
   }
 
   on(main, 'click', '[data-tab]', (e, b) => {
@@ -93,6 +95,12 @@ export default async function vehicleEdit(el, { id }) {
     } catch (err) { toast(errMsg(err), 'bad'); }
   });
   on(main, 'click', '#copy', () => copyText(portfolioUrl(v)));
+  on(main, 'click', '[data-goto]', (e, b) => {
+    tab = b.dataset.goto;
+    history.replaceState({}, '', `#${tab}`);
+    frame();
+    window.scrollTo(0, 0);
+  });
 
   // ---------------------------------------------------------------- details
   function details(box) {
@@ -302,7 +310,7 @@ export default async function vehicleEdit(el, { id }) {
     const docs = v.vehicle_documents;
     mount(box, html`<div class="card"><h2>Documents customers can open</h2>
       ${docs.length ? docs.map((d) => html`<div class="doc-row">
-        <span><strong>${d.title}</strong><br><span class="sub small">${(DOC_KINDS.find(([k]) => k === d.kind) || [])[1] || d.kind}</span></span>
+        <span><strong>${d.title}</strong><br><span class="sub small">${(DOC_KINDS.find(([k]) => k === d.kind) || [])[1] || d.kind}${d.source === 'oem' ? ' · from the manufacturer' : d.source === 'provider' ? ' · from the sticker service' : ''}</span></span>
         <span class="btn-row"><a class="btn ghost sm" href="${d.url}" target="_blank" data-external>Open</a>
         <button class="btn danger sm" data-deldoc="${d.id}">Remove</button></span></div>`)
         : html`<p class="sub">No documents yet. Only real documents should go here: window stickers, history reports, inspections and warranty papers.</p>`}
@@ -598,6 +606,15 @@ export default async function vehicleEdit(el, { id }) {
     chomesTab(box, { v, rec: chomes, ctx, staff, onChange: (rec, vehicle) => {
       chomes = rec;
       if (vehicle) Object.assign(v, vehicle);
+      frame();
+    } });
+  }
+
+  // ---------------------------------------------------------------- window sticker
+  function stickerView(box) {
+    stickerTab(box, { v, chomes, ctx, onChange: (vehicle, docs) => {
+      if (vehicle) Object.assign(v, vehicle);
+      if (docs) v.vehicle_documents = docs;
       frame();
     } });
   }
