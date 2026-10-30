@@ -19,8 +19,7 @@ export default async function print(el, { id }) {
   let v, share, svg;
   try {
     v = must(await sb.from('vehicles').select('*, vehicle_photos(url,position)').eq('id', id).eq('dealership_id', d.id).single());
-    share = must(await sb.from('shares').select('code').eq('vehicle_id', v.id).eq('channel', 'qr').limit(1).maybeSingle());
-    if (!share) share = must(await sb.from('shares').insert({ vehicle_id: v.id, dealership_id: d.id, channel: 'qr', customer_name: 'QR window card' }).select('code').single());
+    share = { code: must(await sb.rpc('vp_qr_share', { p_vehicle_id: v.id })) };
     svg = await qrSvg(portfolioUrl(v, share.code));
   } catch (e) {
     mount(main, html`<div class="card">${errMsg(e)}</div>`);

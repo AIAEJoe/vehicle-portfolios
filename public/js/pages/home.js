@@ -1,6 +1,7 @@
 // Public showroom: all published vehicles for this dealership.
 import { sb, html, mount, must, money, miles, vTitle, conditionLabel, loadDealership, loadingView, errMsg, $ } from '../core.js';
 import { siteHeader, siteFooter } from './site.js';
+import { programBanner } from '../warranty-program.js';
 
 export default async function home(el) {
   mount(el, loadingView());
@@ -8,7 +9,7 @@ export default async function home(el) {
   try {
     d = await loadDealership();
     vehicles = must(await sb.from('vehicles')
-      .select('id,slug,year,make,model,trim,price,mileage,condition,exterior_color,stock_number,vehicle_photos(url,position)')
+      .select('id,slug,year,make,model,trim,price,mileage,condition,exterior_color,stock_number,bg_warranty,bg_program,vehicle_photos(url,position)')
       .eq('dealership_id', d.id).eq('status', 'published')
       .order('updated_at', { ascending: false }).limit(500));
   } catch (e) {
@@ -20,7 +21,8 @@ export default async function home(el) {
   const card = (v) => {
     const photo = (v.vehicle_photos || []).sort((a, b) => a.position - b.position)[0];
     return html`<a class="inv-card" href="/v/${v.slug}" data-q="${[vTitle(v), v.stock_number, v.exterior_color].join(' ').toLowerCase()}">
-      ${photo ? html`<img src="${photo.url}" alt="${vTitle(v)}" loading="lazy">` : html`<div class="noimg"></div>`}
+      <div class="inv-photo">${photo ? html`<img src="${photo.url}" alt="${vTitle(v)}" loading="lazy">` : html`<div class="noimg"></div>`}
+      ${(() => { const b = v.condition !== 'new' && programBanner(v, d.bg_program); return b ? html`<div class="wbanner sm"><strong>${b.text}</strong>${b.note ? html`<span>${b.note}</span>` : ''}</div>` : ''; })()}</div>
       <div class="body">
         <div class="sub small">${conditionLabel(v.condition)}${v.stock_number ? ` · Stock ${v.stock_number}` : ''}</div>
         <h3>${vTitle(v)}</h3>

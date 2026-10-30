@@ -43,7 +43,7 @@ export default async function shoot(el, params, token = {}) {
     if (term.length < 3) { msg.innerHTML = String(html`<p class="notice warn">Enter the stock number.</p>`); return; }
     msg.innerHTML = String(html`<p class="small sub">Looking…</p>`);
     try {
-      const sel = 'id,year,make,model,trim,stock_number,vin,exterior_color,mileage,status,vehicle_photos(id,url,position,source)';
+      const sel = 'id,slug,condition,year,make,model,trim,stock_number,vin,exterior_color,mileage,status,vehicle_photos(id,url,position,source)';
       let found = must(await sb.from('vehicles').select(sel).eq('dealership_id', D).in('status', ['draft', 'published']).ilike('stock_number', term).limit(5));
       if (!found.length && /^[A-HJ-NPR-Z0-9]{6,17}$/.test(term)) {
         found = must(await sb.from('vehicles').select(sel).eq('dealership_id', D).in('status', ['draft', 'published']).ilike('vin', `%${term}`).limit(5));
@@ -84,6 +84,11 @@ export default async function shoot(el, params, token = {}) {
       <label class="btn alt shoot-roll">Add from camera roll<input type="file" id="roll" accept="image/*" multiple class="sr-only"></label>
       <label class="check small"><input type="checkbox" id="cover" ${car.cover ? 'checked' : ''}> Put these photos first (the first one becomes the cover)</label>
       ${mine.length ? html`<p class="small sub" style="margin:6px 0 0">${mine.length} taken for this car this session.</p>` : ''}
+      <div class="shoot-print">
+        <a class="btn alt sm" href="/admin/vehicles/${v.id}/sticker" target="_blank" data-external>🖨 Window sticker</a>
+        ${v.condition !== 'new' ? html`<a class="btn alt sm" href="/v/${v.slug}/buyers-guide?lang=en" target="_blank" data-external>🖨 Buyers Guide</a>` : ''}
+      </div>
+      ${v.status !== 'published' ? html`<p class="hint" style="margin:4px 0 0">This car isn't live yet, so its QR code won't open until the store publishes it.</p>` : ''}
       <button type="button" class="btn ghost" id="next" style="margin-top:6px">Done, next car</button>
     </div>`);
     const add = (files) => { enqueue([...files]); };

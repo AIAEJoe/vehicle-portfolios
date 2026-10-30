@@ -811,6 +811,27 @@ console.log('Dashboard');
     assert((await p2.textContent('.ws-warranty')).includes('Lifetime Limited Powertrain Warranty – unlimited time & miles while you own it'), 'sticker line');
     await p2.close();
   });
+  await step('LIFETIME WARRANTY banner on the first photo of qualifying cars only', async () => {
+    const p3 = await context.newPage();
+    await p3.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await p3.waitForSelector('#wbanner');
+    assert((await p3.textContent('#wbanner')).includes('LIFETIME WARRANTY') && (await p3.textContent('#wbanner')).includes('Limited powertrain · see Buyers Guide'), 'banner text');
+    await p3.click('#gal .next');
+    assert(!(await p3.isVisible('#wbanner')), 'hidden on the second photo');
+    await p3.click('#gal .prev');
+    assert(await p3.isVisible('#wbanner'), 'back on the first photo');
+    await p3.screenshot({ path: join(SHOTS, '18-lifetime-banner.png'), clip: { x: 0, y: 0, width: 1280, height: 760 } });
+    await p3.goto(`${ORIGIN}/`);
+    await p3.waitForSelector('.inv-card');
+    assert((await p3.$$('.inv-card .wbanner')).length === 1, 'inventory grid shows it on the qualifying car');
+    // a car whose ad mentions it but whose Buyers Guide doesn't: no banner
+    await p3.evaluate(() => { const v = window.__DB.vehicles[0]; v._saved = { bg_warranty: v.bg_warranty, bg_program: v.bg_program }; v.bg_warranty = 'as_is'; v.bg_program = null; window.__SAVE(); });
+    await p3.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await p3.waitForSelector('#gal-img');
+    assert(!(await p3.$('#wbanner')), 'no banner without the warranty on the Buyers Guide');
+    await p3.evaluate(() => { const v = window.__DB.vehicles[0]; Object.assign(v, v._saved); delete v._saved; window.__SAVE(); });
+    await p3.close();
+  });
   await step('settings: Buyers Guide complaint contact and default', async () => {
     await page.goto(`${ORIGIN}/admin/settings`);
     await page.waitForSelector('#bg');
@@ -1312,6 +1333,31 @@ console.log('Photographer');
     assert(all.filter((p) => p.vehicle_id === V).length === 5 && all.filter((p) => p.vehicle_id === TRAX).length === 1, all.map((p) => p.vehicle_id).join());
     const ups = await page.evaluate(() => window.__UPLOADS);
     assert(ups.some((u) => u.path.includes(`/vehicles/${TRAX}/`)) && ups.filter((u) => u.path.includes(`/vehicles/${V}/`)).length === 5, 'storage paths per car');
+  });
+  await step('photographer prints the window sticker and Buyers Guide from the Photos page', async () => {
+    await page.evaluate(() => { const c = window.__DB.vehicle_chomes[0]; Object.assign(c, { highlight_features: ['Removable hard top'], recon_cost: 450, acquisition_notes: 'Auction buy',
+      report_provider: 'carfax', prior_owners: 2, accidents_count: 0, title_issues: false }); window.__SAVE(); });
+    await page.click('#next');
+    await page.fill('#stock', 'R287418B');
+    await page.click('#find button');
+    await page.waitForSelector('.shoot-print');
+    const [st] = await Promise.all([context.waitForEvent('page'), page.click('.shoot-print a:has-text("Window sticker")')]);
+    await st.waitForSelector('.ws');
+    const t = await st.textContent('.ws');
+    for (const x of ['2018 Jeep Wrangler Sport S', 'Removable hard top', '2 prior owners (CARFAX report)', 'Scan for photos']) assert(t.includes(x), x);
+    for (const bad of ['450', 'Auction buy']) assert(!t.includes(bad), 'leaked ' + bad);
+    assert(await st.$('.ws-qr svg[data-qr*="?s="]'), 'tracked QR code');
+    assert((await st.textContent('.page-head')).includes('Photos'), 'back link goes to Photos');
+    const calls = await st.evaluate(() => window.__CALLS.map((c) => c.table || c.rpc));
+    assert(!calls.includes('vehicle_chomes') && !calls.includes('shares') && calls.includes('vp_sticker_chomes') && calls.includes('vp_qr_share'), calls.join());
+    await st.close();
+    const [bg] = await Promise.all([context.waitForEvent('page'), page.click('.shoot-print a:has-text("Buyers Guide")')]);
+    await bg.waitForSelector('.bg-print-page .bg-front');
+    assert((await bg.textContent('.bg-print-page')).includes('BUYERS GUIDE'), 'Buyers Guide opens');
+    await bg.close();
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}/print`);
+    await page.waitForSelector('#stock');
+    assert(new URL(page.url()).pathname === '/admin/shoot', 'other admin print pages stay closed');
   });
   await step('nothing else is loaded for a photographer (no inbox counts, no leads)', async () => {
     const calls = await page.evaluate(() => window.__CALLS.map((c) => c.table).filter(Boolean));

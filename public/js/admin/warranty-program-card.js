@@ -39,6 +39,11 @@ export async function warrantyProgramCard(box, { dealership, onSaved }) {
       <div id="wp-sys"></div>
       <button type="button" class="btn alt sm" id="wp-sys-add">+ Add system</button>
       <label for="wp-line">Line on the dealer window sticker</label><input id="wp-line" data-k="sticker_line" value="${draft.sticker_line || ''}">
+      <div class="grid2 stack-sm">
+        <div><label for="wp-banner">Banner on the first photo</label><input id="wp-banner" data-k="banner_text" value="${draft.banner_text ?? DEFAULT_PROGRAM.banner_text}">
+          <div class="hint">Shown on the customer page and inventory grid for cars that have the program. Leave blank for no banner.</div></div>
+        <div><label for="wp-banner-note">Small print under the banner</label><input id="wp-banner-note" data-k="banner_note" value="${draft.banner_note ?? DEFAULT_PROGRAM.banner_note}"></div>
+      </div>
       <button class="btn" style="margin-top:12px">${p ? 'Save program' : 'Save program terms'}</button>
       ${p ? html`<p class="hint">Changing the terms doesn't change cars already done; they show below as "older terms" until you apply again.</p>` : ''}
     </form>
@@ -71,7 +76,7 @@ export async function warrantyProgramCard(box, { dealership, onSaved }) {
   on(box, 'click', '[data-sys-del]', (e, b) => { draft.systems.splice(Number(b.dataset.sysDel), 1); drawSystems(); });
   on(box, 'submit', '#wp-form', async (e) => {
     e.preventDefault();
-    const clean = { ...draft, name: draft.name.trim(), match: draft.match.trim(), deductible: (draft.deductible || '').trim() || null, sticker_line: (draft.sticker_line || '').trim() || null,
+    const clean = { ...draft, name: draft.name.trim(), match: draft.match.trim(), deductible: (draft.deductible || '').trim() || null, sticker_line: (draft.sticker_line || '').trim() || null, banner_text: (draft.banner_text ?? DEFAULT_PROGRAM.banner_text).trim(), banner_note: (draft.banner_note ?? DEFAULT_PROGRAM.banner_note).trim(),
       systems: draft.systems.map((s) => ({ system: s.system.trim(), duration: s.duration.trim() })).filter((s) => s.system || s.duration) };
     if (clean.systems.some((s) => isShorthand(s.system))) { toast('Name each covered system\'s parts; "powertrain" on its own isn\'t allowed', 'bad'); return; }
     try {
