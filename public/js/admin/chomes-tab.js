@@ -5,6 +5,7 @@ import {
   SECTIONS, GRADES, PROVIDERS, SOURCE_LABEL, VS_AVERAGE_LABEL, ANNUAL_MILES, CHOMES_CREDIT, computeChomes, isVehicleField,
 } from '../chomes.js';
 import { resolveGuide } from '../buyers-guide.js';
+import { parseFactoryOptions, textItemsToLines } from '../sticker.js';
 import { uploadFile, removeFile } from './media.js';
 
 const BUCKET = 'internal';
@@ -152,6 +153,7 @@ export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
           <div>${label('options_packages', 'Options and packages (one per line)')}
             <textarea id="ch-options_packages" name="options_packages" rows="5" placeholder="Cold Weather Group&#10;Trailer Tow Package">${(rec.options_packages || []).join('\n')}</textarea>${src('options_packages')}
             ${!(rec.options_packages || []).length && (v.features || []).length ? html`<button type="button" class="btn ghost sm" id="ch-from-feed">Start from the ${v.features.length} listed features</button>` : ''}
+            ${factorySticker(v) ? html`<button type="button" class="btn alt sm" id="ch-from-sticker">Read options from the factory sticker</button><div id="ch-sticker-opts"></div>` : ''}
             <div class="hint">From the window sticker.</div></div>
           <div>${label('highlight_features', 'Highlight features (one per line, 3 to 5)')}
             <textarea id="ch-highlight_features" name="highlight_features" rows="5" placeholder="Heated seats&#10;Remote start&#10;Apple CarPlay">${(rec.highlight_features || []).join('\n')}</textarea>${src('highlight_features')}
@@ -190,6 +192,28 @@ export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
     if (e.target.name === 'title_issues') $('#ch-title-detail', box).hidden = e.target.value !== 'true';
   });
   hlCount();
+
+  on(box, 'click', '#ch-from-sticker', async (e, b) => {
+    b.disabled = true;
+    const out = $('#ch-sticker-opts', box);
+    out.innerHTML = String(html`<p class="small sub">Reading the sticker…</p>`);
+    try {
+      const found = parseFactoryOptions(await pdfLines(factorySticker(v).url));
+      const have = new Set(form.options_packages.value.split('\n').map((x) => x.trim().toLowerCase()).filter(Boolean));
+      const fresh = found.filter((o) => !have.has(o.toLowerCase()));
+      if (!found.length) { out.innerHTML = String(html`<div class="notice">No optional equipment section found on this sticker. Enter packages by hand.</div>`); b.disabled = false; return; }
+      if (!fresh.length) { out.innerHTML = String(html`<div class="notice ok">All ${found.length} options from the sticker are already listed.</div>`); return; }
+      out.innerHTML = String(html`<div class="ch-suggest"><p class="small" style="margin:6px 0"><strong>Found on the factory sticker.</strong> Tick the ones to add, then save.</p>
+        ${fresh.map((o, i) => html`<label class="check small" style="margin:4px 0;font-weight:500"><input type="checkbox" data-opt="${i}" checked> ${o}</label>`)}
+        <button type="button" class="btn sm" id="ch-add-opts">Add selected</button></div>`);
+      $('#ch-add-opts', box).addEventListener('click', () => {
+        const picked = fresh.filter((_, i) => out.querySelector(`[data-opt="${i}"]`).checked);
+        const cur = form.options_packages.value.trim();
+        form.options_packages.value = [cur, ...picked].filter(Boolean).join('\n');
+        out.innerHTML = String(html`<p class="small" style="color:var(--ok)">Added ${picked.length}. Save CHOMES to keep them.</p>`);
+      });
+    } catch (err) { out.innerHTML = String(html`<div class="notice warn">Couldn't read the sticker: ${errMsg(err)}</div>`); b.disabled = false; }
+  });
 
   const fromFeed = $('#ch-from-feed', box);
   fromFeed && fromFeed.addEventListener('click', () => { form.options_packages.value = v.features.join('\n'); fromFeed.remove(); });
@@ -281,3 +305,27 @@ export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
   });
 }
 
+function factorySticker(v) {
+  return (v.vehicle_documents || []).find((d) => d.kind === 'window_sticker' && /\.pdf(\?|$)/i.test(d.url || ''));
+}
+
+// pdf.js loaded on demand. The worker runs from a same-origin blob that imports the CDN build, because browsers
+// won't start a worker straight from another origin.
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build';
+let pdfjs;
+async function pdfLines(url) {
+  if (!pdfjs) {
+    pdfjs = await import(`${PDFJS}/pdf.min.mjs`);
+    const boot = URL.createObjectURL(new Blob([`import "${PDFJS}/pdf.worker.min.mjs";`], { type: 'text/javascript' }));
+    pdfjs.GlobalWorkerOptions.workerPort = new Worker(boot, { type: 'module' });
+  }
+  const task = pdfjs.getDocument({ url, isEvalSupported: false });
+  const doc = await task.promise;
+  const lines = [];
+  for (let n = 1; n <= Math.min(doc.numPages, 4); n++) {
+    const page = await doc.getPage(n);
+    lines.push(...textItemsToLines((await page.getTextContent()).items));
+  }
+  await task.destroy();
+  return lines;
+}

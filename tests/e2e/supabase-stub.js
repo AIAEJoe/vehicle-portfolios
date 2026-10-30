@@ -119,13 +119,13 @@ function stampVehicle(row, before, source) {
 
 const slugify = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const DEFAULTS = {
-  vehicles: (r) => ({ status: 'draft', condition: 'used', features: [], specs: {}, source: 'manual', feed_locked: false, price_label: 'Price',
+  vehicles: (r) => ({ status: 'draft', condition: 'used', features: [], specs: {}, price_stack: [], source: 'manual', feed_locked: false, price_label: 'Price',
     slug: r.slug || slugify([r.year, r.make, r.model, r.trim, r.stock_number].filter(Boolean).join(' ')) || r.id.slice(0, 8) }),
   shares: () => ({ code: Math.random().toString(36).slice(2, 10), open_count: 0, channel: 'sms' }),
   staff: () => ({ active: true, notify_email: true, notify_sms: true, title: 'Sales Consultant' }),
   leads: () => ({ status: 'new', kind: 'test_drive' }),
   vehicle_photos: () => ({ position: 0, source: 'upload' }),
-  vehicle_documents: () => ({ kind: 'other' }),
+  vehicle_documents: () => ({ kind: 'other', source: 'upload' }),
   vehicle_chomes: () => ({ options_packages: [], highlight_features: [], provenance: {}, review_required: false }),
 };
 

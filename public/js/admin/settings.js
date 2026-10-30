@@ -69,6 +69,12 @@ export default async function settings(el) {
       <label class="check"><input type="checkbox" name="bg_signature_line" ${d.bg_signature_line ? 'checked' : ''}> Add the optional buyer signature line to the guide</label>
       <button class="btn" style="margin-top:12px">Save Buyers Guide settings</button>
     </form>
+    <form class="card" id="ws"><h2>Window stickers</h2>
+      <label for="s-sticker_disclaimer">Small print at the bottom of every dealer window sticker</label>
+      <textarea id="s-sticker_disclaimer" name="sticker_disclaimer" rows="3" placeholder="Prices exclude tax, tag, title and dealer fees. Rebates subject to change; see dealer for details.">${d.sticker_disclaimer || ''}</textarea>
+      <div class="hint">Keep it accurate for every vehicle. Warranty terms belong on the Buyers Guide, not here.</div>
+      <button class="btn" style="margin-top:12px">Save window sticker settings</button>
+    </form>
 
     <div class="card"><h2>Inventory feed (HomeNet / vAuto)</h2>
       <form id="feed">
@@ -122,6 +128,15 @@ export default async function settings(el) {
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
 
+    $('#ws', main).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        d = must(await sb.from('dealerships').update({ sticker_disclaimer: String(new FormData(e.target).get('sticker_disclaimer') || '').trim() || null }).eq('id', D).select().single());
+        clearDealerCache(); resetAdminContext();
+        toast('Window sticker settings saved');
+        draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    });
     $('#bg', main).addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);

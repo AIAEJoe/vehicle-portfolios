@@ -23,6 +23,7 @@ There is no build step and no runtime npm dependencies.
 | **Dealer dashboard** `/admin` | Vehicles (add by listing URL, VIN, HomeNet/vAuto feed, or by hand), photos, documents, QR window cards, sharing, **Inbox**, leads, staff, **Usage**, Settings → **Texting & email**. |
 | **Inbox** | Two-way texts and emails with each customer. Shows delivery status (✓ sent, ✓✓ delivered, ⚠ failed), the consent timeline, the assigned salesperson, and a "Do not text" button. |
 | **CHOMES** (vehicle's page → CHOMES tab) | Team-only vehicle story for every used/CPO car: Condition, History, Old, Miles, Equipment, Supply & demand. Old/Miles/Equipment fill in automatically, with where each value came from. Flags records that need an FTC consistency check. |
+| **Window stickers** (vehicle's page → Window sticker tab) | Printable letter-size dealer sticker: price with an optional **pricing stack**, equipment, option packages, the CHOMES vehicle story and a tracked QR code. Plus the **original factory sticker** fetched by VIN, with its option packages read into CHOMES. |
 | **Leads** | Saved to the database and emailed to the store and the salesperson. Sent to **Elead as ADF/XML**. The salesperson also gets a text. |
 | **Inventory** | HomeNet/vAuto CSV feed synced hourly, by HTTPS URL, relay upload, or manual upload. |
 | **Platform console** `/platform` | For you: every dealership with usage, **provider cost, invoice and margin**; plan and allowance per dealership; **10DLC onboarding runner**; email domains; rate card. |
@@ -143,6 +144,7 @@ Per-dealership plan options:
    - `supabase/migrations/0002_messaging_platform.sql`
    - `supabase/seed.sql`
    - `supabase/migrations/0005_chomes.sql` (CHOMES). On an existing install, run `supabase/run-2026-10-23.sql` instead; it's the same and safe to run twice.
+   - `supabase/migrations/0006_window_stickers.sql` (window stickers). On an existing install, run `supabase/run-2026-10-30.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -212,11 +214,11 @@ If you register a dealership in the Twilio Console instead, paste the SIDs under
 ## Tests
 
 ```bash
-bash tests/sql/run.sh                  # 154 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
-                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review
-node --test tests/functions/*.test.js  # 62 tests (incl. CHOMES calculations): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
+bash tests/sql/run.sh                  # 167 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
+                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules
+node --test tests/functions/*.test.js  # 72 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 61 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 67 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.
