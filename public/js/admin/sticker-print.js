@@ -5,6 +5,7 @@ import { sb, html, raw, mount, must, money, miles, vTitle, conditionLabel, portf
 import { adminPage } from './layout.js';
 import { priceStack, stickerStory } from '../sticker.js';
 import { needsBuyersGuide } from '../buyers-guide.js';
+import { programStickerLine, programStatus } from '../warranty-program.js';
 
 async function qrSvg(text) {
   const mod = await import('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/+esm');
@@ -39,7 +40,9 @@ export default async function stickerPrint(el, { id }) {
   const specs = [['Engine', v.engine], ['Transmission', v.transmission], ['Drivetrain', v.drivetrain], ['Fuel', v.fuel_type],
     ['MPG', v.mpg_city && v.mpg_hwy ? `${v.mpg_city} city / ${v.mpg_hwy} hwy` : null], ['Exterior', v.exterior_color], ['Interior', v.interior_color]].filter(([, x]) => x);
   const fees = v.fees_note || d.default_fees_note;
+  const programLine = used ? programStickerLine(v, d.bg_program) : null;
   const notes = [
+    used && programStatus(v, d.bg_program) === 'missing' && `The description mentions the ${d.bg_program.name}, but this car's Buyers Guide doesn't include it, so the sticker doesn't mention it. Apply it on the Buyers Guide tab.`,
     !v.price && 'This vehicle has no price, so the sticker says "Call for price".',
     stack.has && !stack.valid && `The pricing stack isn't printed: ${stack.reason}. Fix it on the vehicle's Window sticker tab.`,
     st.held && 'The CHOMES vehicle story isn\'t printed until the FTC consistency review is cleared on the CHOMES tab.',
@@ -78,6 +81,7 @@ export default async function stickerPrint(el, { id }) {
           ${specs.length ? html`<h2>Specifications</h2><dl class="ws-specs">${specs.map(([k, x]) => html`<dt>${k}</dt><dd>${x}</dd>`)}</dl>` : ''}
         </section>
         <section class="ws-right">
+          ${programLine ? html`<div class="ws-warranty"><strong>${programLine}</strong><span>Coverage, deductible and conditions are on the Buyers Guide.</span></div>` : ''}
           ${st.highlights.length ? html`<h2>Highlights</h2><ul class="ws-hl">${st.highlights.map((h) => html`<li>${h}</li>`)}</ul>` : ''}
           ${st.options.length ? html`<h2>Options and packages</h2><ul class="ws-opts">${st.options.map((o) => html`<li>${o}</li>`)}</ul>` : ''}
           ${st.story ? html`<h2>Vehicle story</h2><dl class="ws-story">${st.story.map(([k, x]) => html`<dt>${k}</dt><dd>${x}</dd>`)}</dl>` : ''}

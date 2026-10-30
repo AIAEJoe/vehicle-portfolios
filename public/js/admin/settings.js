@@ -2,6 +2,7 @@
 import { sb, html, mount, must, api, $, errMsg, toast, copyText, clearDealerCache, dateTime, setBrand } from '../core.js';
 import { adminPage, resetAdminContext } from './layout.js';
 import { resizeImage, uploadFile } from './media.js';
+import { warrantyProgramCard } from './warranty-program-card.js';
 
 export default async function settings(el) {
   const page = await adminPage(el, 'settings', { adminOnly: true });
@@ -69,6 +70,8 @@ export default async function settings(el) {
       <label class="check"><input type="checkbox" name="bg_signature_line" ${d.bg_signature_line ? 'checked' : ''}> Add the optional buyer signature line to the guide</label>
       <button class="btn" style="margin-top:12px">Save Buyers Guide settings</button>
     </form>
+    <div id="wp"></div>
+
     <form class="card" id="ws"><h2>Window stickers</h2>
       <label for="s-sticker_disclaimer">Small print at the bottom of every dealer window sticker</label>
       <textarea id="s-sticker_disclaimer" name="sticker_disclaimer" rows="3" placeholder="Prices exclude tax, tag, title and dealer fees. Rebates subject to change; see dealer for details.">${d.sticker_disclaimer || ''}</textarea>
@@ -191,6 +194,7 @@ export default async function settings(el) {
       } catch (err) { toast(errMsg(err), 'bad'); }
       await load(); draw();
     });
+    warrantyProgramCard($('#wp', main), { dealership: d, onSaved: (prog) => { d.bg_program = prog; } });
   }
   draw();
 }

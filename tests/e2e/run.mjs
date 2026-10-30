@@ -750,6 +750,65 @@ console.log('Dashboard');
     await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
     await page.waitForSelector('#details');
   });
+  await step('warranty program: set up from the NSB form; shorthand blocked', async () => {
+    await page.evaluate(() => { const v = window.__DB.vehicles[0]; v.description = 'Clean CARFAX. Includes our Lifetime Limited Powertrain Warranty!'; window.__SAVE(); });
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.waitForSelector('#wp-form');
+    const t = await page.textContent('#wp-form');
+    assert(t.includes('TWS-LW-AMSI F 06/24') && t.includes('confirm the covered-systems wording'), 'pre-filled with a confirmation warning');
+    assert((await page.inputValue('#wp-name')) === 'Lifetime Limited Powertrain Warranty' && (await page.inputValue('#wp-labor')) === '100', 'defaults');
+    assert((await page.inputValue('#wp-ded')).includes('$100'), 'deductible');
+    await page.fill('[data-sys="0"][data-f=system]', 'Powertrain');
+    await page.locator('[data-sys="0"][data-f=system]').dispatchEvent('change');
+    await page.waitForSelector('#wp-sys >> text=isn\'t allowed');
+    await page.click('#wp-form button:not([type=button])');
+    await page.waitForSelector('#toast >> text=on its own isn\'t allowed');
+    assert(!(await db()).dealerships[0].bg_program, 'not saved');
+    await page.fill('[data-sys="0"][data-f=system]', 'Engine: cylinder block, cylinder heads and internal lubricated parts');
+    await page.click('#wp-form button:not([type=button])');
+    await page.waitForSelector('#toast >> text=Warranty program saved');
+    const p = (await db()).dealerships[0].bg_program;
+    assert(p.name === 'Lifetime Limited Powertrain Warranty' && p.systems.length === 3 && p.parts_pct === 100, JSON.stringify(p));
+  });
+  await step('warranty program: cars whose ad mentions it but whose Buyers Guide lacks it are flagged', async () => {
+    await page.goto(`${ORIGIN}/admin/vehicles`);
+    await page.waitForSelector('.vrow');
+    assert((await page.textContent('.vrow')).includes('Warranty missing from Buyers Guide'), 'list badge');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#guide`);
+    await page.waitForSelector('#bg-program');
+    assert((await page.textContent('#bg-program')).includes("mentions the Lifetime Limited Powertrain Warranty, but this Buyers Guide doesn't include it"), 'tab notice');
+    assert(await page.$('[data-tab=guide] .badge'), 'tab badge');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
+    await page.waitForSelector('.ws');
+    assert(!(await page.textContent('.ws')).includes('Lifetime'), 'sticker does not mention it before it is on the Buyers Guide');
+    assert((await page.textContent('main')).includes("this car's Buyers Guide doesn't include it"), 'staff told why');
+  });
+  await step('warranty program: review list in Settings, apply, Buyers Guide and sticker updated', async () => {
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.waitForSelector('#wp-cars .wp-car');
+    const t = await page.textContent('#wp-cars');
+    assert(t.includes('2018 Jeep Wrangler Sport S') && t.includes('Buyers Guide shows a different dealer warranty'), t);
+    await page.click('#wp-apply');
+    await page.waitForSelector('#toast >> text=Applied to 1 car');
+    const v = (await db()).vehicles[0];
+    assert(v.bg_program === 'Lifetime Limited Powertrain Warranty' && v.bg_labor_pct === 100 && v.bg_parts_pct === 100 && v.bg_systems.length === 3
+      && v.bg_deductible === 'A $100 deductible applies to each covered repair', JSON.stringify(v));
+    await page.waitForSelector('#wp-cars >> text=Nothing to do');
+    const p2 = await context.newPage();
+    await p2.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b/buyers-guide?lang=en`);
+    await p2.waitForSelector('.bg-print-page .bg-front');
+    const g = await p2.textContent('.bg-print-page');
+    for (const x of ['DEALER WARRANTY', 'LIMITED WARRANTY.', 'Engine: cylinder block, cylinder heads and internal lubricated parts', 'Transmission or transaxle: case and internal parts, torque converter',
+      'Drive axles: axle housings and internal parts, axle shafts, constant-velocity joints', 'For as long as the original purchaser owns the vehicle (not transferable)', 'A $100 deductible applies to each covered repair'])
+      assert(g.includes(x), x);
+    assert((g.match(/For as long as the original purchaser owns the vehicle/g) || []).length === 1, 'shared duration printed once');
+    assert(!/power[\s-]*train/i.test(g), 'no powertrain shorthand on the guide');
+    await p2.screenshot({ path: join(SHOTS, '05h-buyers-guide-lifetime.png'), fullPage: true });
+    await p2.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
+    await p2.waitForSelector('.ws-warranty');
+    assert((await p2.textContent('.ws-warranty')).includes('Lifetime Limited Powertrain Warranty included'), 'sticker line');
+    await p2.close();
+  });
   await step('settings: Buyers Guide complaint contact and default', async () => {
     await page.goto(`${ORIGIN}/admin/settings`);
     await page.waitForSelector('#bg');

@@ -9,6 +9,7 @@ import { resizeImage, uploadFile, removeFile } from './media.js';
 import { renderBuyersGuide, resolveGuide, needsBuyersGuide, isShorthand } from '../buyers-guide.js';
 import { chomesTab, chomesBadge, loadChomes } from './chomes-tab.js';
 import { stickerTab, stickerBadge } from './sticker-tab.js';
+import { programStatus } from '../warranty-program.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -70,7 +71,7 @@ export default async function vehicleEdit(el, { id }) {
         </div>
       </div>
       ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">This portfolio is a draft. Customers can't open it until you publish.</div>` : ''}
-      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html`<span class="badge" title="Warranty data pending">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}${k === 'sticker' && stickerBadge(v) ? html`<span class="badge" title="The pricing stack doesn't match the price, so it won't print">!</span>` : ''}</button>`)}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && (resolveGuide(v, ctx.dealership).pending || programStatus(v, ctx.dealership.bg_program) === 'missing') ? html`<span class="badge" title="Warranty data pending, or the description mentions a warranty the Buyers Guide doesn't have">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}${k === 'sticker' && stickerBadge(v) ? html`<span class="badge" title="The pricing stack doesn't match the price, so it won't print">!</span>` : ''}</button>`)}</div>
       <div id="tab"></div>`);
     drawTab();
   }
@@ -484,6 +485,11 @@ export default async function vehicleEdit(el, { id }) {
     mount(box, html`<form id="bg-form" class="card">
       <h2>FTC Buyers Guide</h2>
       ${g.pending ? html`<div class="notice warn"><strong>Warranty data pending.</strong> Customers currently see the <b>AS IS - NO DEALER WARRANTY</b> guide for this vehicle. Enter the warranty terms below, or set a default for all vehicles in <a href="/admin/settings">Settings</a>. Only staff see this message.</div>` : ''}
+      ${(() => { const ps = programStatus(v, d.bg_program); return ps === 'missing' || ps === 'outdated' ? html`<div class="notice warn" id="bg-program">
+        <strong>${ps === 'missing' ? `The description mentions the ${d.bg_program.name}, but this Buyers Guide doesn't include it.` : `This car has the ${d.bg_program.name} with older terms.`}</strong>
+        ${ps === 'missing' ? ' Customers would see a warranty in the ad and a different one on the window.' : ''}
+        ${canEdit ? html` <button type="button" class="btn sm" id="bg-apply-program">Apply the ${d.bg_program.name}</button>` : ' Ask a dealership admin to apply it.'}</div>` : ''; })()}
+      ${v.bg_program && v.bg_warranty === 'dealer_warranty' ? html`<div class="notice ok">Buyers Guide terms come from the <strong>${v.bg_program}</strong>.</div>` : ''}
       ${!v.bg_warranty && d.bg_default_warranty ? html`<div class="notice">Using your dealership default: <strong>${defaultLabel}</strong>. Choose terms below to override it for this vehicle.</div>` : ''}
       ${canEdit ? '' : html`<div class="notice">Only dealership admins can change warranty terms.</div>`}
       <p class="sub small">This drives the Buyers Guide on the customer page and the printed window guide. Enter only the terms you actually offer on this vehicle. If terms change during negotiation, update them here and reprint before closing so both match.</p>
@@ -582,6 +588,17 @@ export default async function vehicleEdit(el, { id }) {
     on(box, 'click', '#sys-add', () => { systems.push({ system: '', duration: '' }); drawSystems(); $(`[data-sys="${systems.length - 1}"][data-k="system"]`, box).focus(); });
     on(box, 'click', '[data-sys-del]', (e, b) => { systems.splice(Number(b.dataset.sysDel), 1); drawSystems(); refresh(); });
 
+    const applyBtn = $('#bg-apply-program', box);
+    applyBtn && applyBtn.addEventListener('click', async () => {
+      if (!confirm(`Put the ${d.bg_program.name} on this car's Buyers Guide?`)) return;
+      applyBtn.disabled = true;
+      try {
+        must(await sb.rpc('vp_apply_bg_program', { p_vehicle_ids: [v.id] }));
+        Object.assign(v, must(await sb.from('vehicles').select('*').eq('id', v.id).single()));
+        toast('Warranty applied. Reprint the window guide so it matches.');
+        frame();
+      } catch (err) { toast(errMsg(err), 'bad'); applyBtn.disabled = false; }
+    });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const body = collect();

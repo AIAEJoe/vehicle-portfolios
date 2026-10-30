@@ -227,6 +227,21 @@ export function createClient() {
         return { data: db.dealerships.map((d) => { const p = db.messaging_profiles.find((x) => x.dealership_id === d.id) || {}; const b = db.dealership_billing.find((x) => x.dealership_id === d.id) || {};
           return { id: d.id, slug: d.slug, name: d.name, a2p_status: p.a2p_status, sms_enabled: p.sms_enabled, phone: p.twilio_phone_number, email_domain: p.email_domain, email_domain_status: p.email_domain_status, billing_status: b.status, usage: usageSummary(d.id, true) }; }), error: null };
       }
+      if (fn === 'vp_apply_bg_program') {
+        const vs = db.vehicles.filter((x) => args.p_vehicle_ids.includes(x.id));
+        if (!vs.length) return { data: 0, error: null };
+        const d = db.dealerships.find((x) => x.id === vs[0].dealership_id);
+        const p = d.bg_program;
+        if (!p) return { data: null, error: { message: 'Set up the warranty program in Settings first' } };
+        let n = 0;
+        for (const v of vs.filter((x) => x.condition === 'used' || x.condition === 'certified')) {
+          Object.assign(v, { bg_warranty: 'dealer_warranty', bg_warranty_type: 'limited', bg_labor_pct: p.labor_pct, bg_parts_pct: p.parts_pct,
+            bg_deductible: p.deductible || null, bg_systems: JSON.parse(JSON.stringify(p.systems)), bg_program: p.name, bg_updated_at: now() });
+          n++;
+        }
+        window.__SAVE();
+        return { data: n, error: null };
+      }
       if (fn === 'vp_vehicle_apply_decode') {
         const v = db.vehicles.find((x) => x.id === args.p_vehicle_id);
         if (!v) return { data: null, error: { message: 'Vehicle not found' } };
