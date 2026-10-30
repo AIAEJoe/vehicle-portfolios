@@ -443,6 +443,8 @@ function mockPhotoFeed(store = {}) {
     { vehicle_id: 'v1', url: 'https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/b.jpg', position: 1, created_at: '2026-10-30T15:00:00Z' },
     { vehicle_id: 'v1', url: 'https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/a.jpg', position: -2, created_at: '2026-10-30T16:00:00Z' },
     { vehicle_id: 'v3', url: 'https://x/c.jpg', position: 0, created_at: '2026-10-30T15:00:00Z' }]; });
+  mock((u) => u.includes('/rest/v1/vehicle_media?'), () => [{ vehicle_id: 'v1', kind: 'video', url: 'https://x/walk.mp4', frames: [] },
+    { vehicle_id: 'v1', kind: 'spin', url: null, frames: [{ url: 'https://x/s1.jpg' }, { url: 'https://x/s2.jpg' }] }]);
 }
 
 test('photo feed: CSV of shot cars, photos in display order, uploads only, published only', async () => {
@@ -452,9 +454,9 @@ test('photo feed: CSV of shot cars, photos in display order, uploads only, publi
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/csv/);
   const lines = (await res.text()).trim().split('\r\n');
-  assert.equal(lines[0], 'VIN,StockNumber,Year,Make,Model,Trim,Type,PhotoCount,PhotosUpdated,PhotoURLs');
+  assert.equal(lines[0], 'VIN,StockNumber,Year,Make,Model,Trim,Type,PhotoCount,PhotosUpdated,PhotoURLs,VideoURL');
   assert.equal(lines.length, 2, 'only cars with photographer photos and a VIN');
-  assert.equal(lines[1], '1G1YC3D46P5136227,5302353A,2023,Chevrolet,Corvette,"3LT, ""Z51""",Used,2,2026-10-30T16:00:00Z,"https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/a.jpg,https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/b.jpg"');
+  assert.equal(lines[1], '1G1YC3D46P5136227,5302353A,2023,Chevrolet,Corvette,"3LT, ""Z51""",Used,2,2026-10-30T16:00:00Z,"https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/a.jpg,https://proj.supabase.co/storage/v1/object/public/media/d1/vehicles/v1/b.jpg",https://x/walk.mp4');
   assert.match(store.vehicles, /status=eq\.published/);
   assert.match(store.photos, /source=eq\.upload/);
 });
@@ -466,6 +468,7 @@ test('photo feed: pipe separator and JSON', async () => {
   const j = await (await photoFeedGet(ctx(req('https://nsbchevy.aiautoengine.com/api/feeds/photos?token=photo-token&format=json')))).json();
   assert.equal(j.vehicles.length, 1);
   assert.equal(j.vehicles[0].photos[0].endsWith('/a.jpg'), true);
+  assert.deepEqual([j.vehicles[0].video, j.vehicles[0].spin, j.vehicles[0].interior360], ['https://x/walk.mp4', ['https://x/s1.jpg', 'https://x/s2.jpg'], null]);
 });
 
 test('photo feed: the inventory token or no token is refused', async () => {
