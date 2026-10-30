@@ -1,7 +1,7 @@
 // Dealer warranty program: description matching, per-car status, sticker line.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_PROGRAM as P, mentionsProgram, programStatus, programStickerLine } from '../../public/js/warranty-program.js';
+import { DEFAULT_PROGRAM as P, mentionsProgram, programStatus, programStickerLine, programBanner } from '../../public/js/warranty-program.js';
 
 test('descriptions that mention the program', () => {
   for (const d of ['Lifetime Warranty - Unlimited Time & Miles', 'Includes our LIFETIME LIMITED POWERTRAIN WARRANTY!', 'lifetime power-train warranty included',
@@ -43,4 +43,14 @@ test('default program wording passes the FTC shorthand rule', () => {
   assert.equal(P.parts_pct, 100);
   assert.match(P.deductible, /\$100/);
   assert.ok(P.systems.every((s) => /not transferable/.test(s.duration) && /no mileage limit/.test(s.duration)));
+});
+
+test('first-photo banner: only when the Buyers Guide carries the program; text editable; blank turns it off', () => {
+  assert.deepEqual(programBanner(applied, P), { text: 'LIFETIME WARRANTY', note: 'Limited powertrain · see Buyers Guide' });
+  assert.equal(programBanner(base, P), null, 'mentioned in the ad but not on the Buyers Guide: no banner');
+  assert.equal(programBanner({ ...applied, bg_warranty: 'as_is' }, P), null);
+  const saved = { ...P }; delete saved.banner_text; delete saved.banner_note;
+  assert.equal(programBanner(applied, saved).text, 'LIFETIME WARRANTY', 'programs saved before banners existed get the default');
+  assert.equal(programBanner(applied, { ...P, banner_text: '' }), null, 'blank banner text turns it off');
+  assert.deepEqual(programBanner(applied, { ...P, banner_note: '' }), { text: 'LIFETIME WARRANTY', note: null });
 });

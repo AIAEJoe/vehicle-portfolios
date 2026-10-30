@@ -19,16 +19,16 @@ async function qrSvg(text) {
 const signed = (n) => (n < 0 ? `−${money(-n)}` : `+${money(n)}`);
 
 export default async function stickerPrint(el, { id }) {
-  const page = await adminPage(el, 'vehicles');
+  const page = await adminPage(el, 'vehicles', { photographer: true });
   if (!page) return;
   const { ctx, main } = page;
   const d = ctx.dealership;
   let v, chomes, share, svg;
   try {
     v = must(await sb.from('vehicles').select('*').eq('id', id).eq('dealership_id', d.id).single());
-    if (v.condition !== 'new') chomes = must(await sb.from('vehicle_chomes').select('*').eq('vehicle_id', v.id).maybeSingle());
-    share = must(await sb.from('shares').select('code').eq('vehicle_id', v.id).eq('channel', 'qr').limit(1).maybeSingle());
-    if (!share) share = must(await sb.from('shares').insert({ vehicle_id: v.id, dealership_id: d.id, channel: 'qr', customer_name: 'QR window card' }).select('code').single());
+    // Only the customer-safe CHOMES facts, and the car's tracked QR link: both work for photographers too.
+    if (v.condition !== 'new') chomes = must(await sb.rpc('vp_sticker_chomes', { p_vehicle_id: v.id }));
+    share = { code: must(await sb.rpc('vp_qr_share', { p_vehicle_id: v.id })) };
     svg = await qrSvg(portfolioUrl(v, share.code));
   } catch (e) {
     mount(main, html`<div class="card">${errMsg(e)} <a href="/admin/vehicles/${id}">Back</a></div>`);
@@ -50,7 +50,7 @@ export default async function stickerPrint(el, { id }) {
   ].filter(Boolean);
 
   mount(main, html`
-    <div class="page-head no-print"><a href="/admin/vehicles/${v.id}#sticker">← Back to vehicle</a>
+    <div class="page-head no-print">${ctx.isPhotographer ? html`<a href="/admin/shoot">← Photos</a>` : html`<a href="/admin/vehicles/${v.id}#sticker">← Back to vehicle</a>`}
       <span class="btn-row">${used && needsBuyersGuide(v) ? html`<a class="btn alt" href="/v/${v.slug}/buyers-guide?lang=en" target="_blank" data-external>Buyers Guide</a>` : ''}
       <button class="btn" onclick="window.print()">Print</button></span></div>
     ${notes.map((n) => html`<div class="notice warn no-print">${n}</div>`)}

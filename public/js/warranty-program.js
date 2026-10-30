@@ -20,6 +20,8 @@ export const DEFAULT_PROGRAM = {
     { system: 'Drive axles: axle housings and internal parts, axle shafts, constant-velocity joints', duration: DURATION },
   ],
   sticker_line: 'Lifetime Limited Powertrain Warranty – unlimited time & miles while you own it',
+  banner_text: 'LIFETIME WARRANTY',
+  banner_note: 'Limited powertrain · see Buyers Guide',
 };
 
 // "Lifetime Limited Power-Train Warranty", "lifetime powertrain warranties" and "LIFETIME WARRANTY (powertrain)" all
@@ -55,4 +57,15 @@ export function programStatus(v, p) {
 export function programStickerLine(v, p) {
   if (!p || v.bg_warranty !== 'dealer_warranty' || v.bg_program !== p.name) return null;
   return p.sticker_line || p.name;
+}
+
+/**
+ * The banner on a qualifying car's first photo (customer page, inventory grid). Same rule as the sticker line:
+ * only when the car's Buyers Guide really carries the program, so an ad can never promise more than the window.
+ */
+export function programBanner(v, p) {
+  if (!programStickerLine(v, p)) return null;
+  const text = (p.banner_text ?? DEFAULT_PROGRAM.banner_text).trim();
+  if (!text) return null; // the dealership turned the banner off
+  return { text, note: (p.banner_note ?? DEFAULT_PROGRAM.banner_note).trim() || null };
 }

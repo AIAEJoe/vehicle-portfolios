@@ -4,6 +4,7 @@ import {
   loadingView, errMsg, $, $$, on, api, store, uuid, initials, copyText, esc,
 } from '../core.js';
 import { siteHeader, siteFooter } from './site.js';
+import { programBanner } from '../warranty-program.js';
 import { renderBuyersGuide, needsBuyersGuide } from '../buyers-guide.js';
 
 const DOC_LABELS = {
@@ -42,6 +43,7 @@ export default async function portfolio(el, { slug }) {
     return;
   }
 
+  const banner = v.condition !== 'new' ? programBanner(v, d.bg_program) : null;
   const photos = (v.vehicle_photos || []).sort((a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at)));
   const docs = v.vehicle_documents || [];
   const title = vTitle(v);
@@ -80,6 +82,7 @@ export default async function portfolio(el, { slug }) {
       ${photos.length ? html`
       <div class="gallery-main" id="gal">
         <img id="gal-img" src="${photos[0].url}" alt="${title} photo 1" fetchpriority="high">
+        ${banner ? html`<div class="wbanner" id="wbanner"><strong>${banner.text}</strong>${banner.note ? html`<span>${banner.note}</span>` : ''}</div>` : ''}
         ${photos.length > 1 ? html`<button class="nav prev" data-step="-1" aria-label="Previous photo">‹</button>
         <button class="nav next" data-step="1" aria-label="Next photo">›</button>` : ''}
         <span class="count" id="gal-count">1 / ${photos.length}</span>
@@ -183,6 +186,8 @@ export default async function portfolio(el, { slug }) {
     img.src = photos[idx].url;
     img.alt = `${title} photo ${idx + 1}`;
     $('#gal-count', el).textContent = `${idx + 1} / ${photos.length}`;
+    const wb = $('#wbanner', el);
+    if (wb) wb.hidden = idx !== 0; // the banner belongs to the first photo
     $$('#thumbs button', el).forEach((b, j) => b.classList.toggle('on', j === idx));
     const on_ = $(`#thumbs button[data-i="${idx}"]`, el);
     if (on_) on_.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });

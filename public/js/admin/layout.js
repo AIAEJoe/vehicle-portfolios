@@ -24,7 +24,7 @@ export function resetAdminContext() { ctxCache = null; }
 /**
  * Renders the admin chrome and returns { ctx, main } or null if redirected.
  */
-export async function adminPage(el, active, { adminOnly = false } = {}) {
+export async function adminPage(el, active, { adminOnly = false, photographer = false } = {}) {
   mount(el, loadingView());
   let ctx;
   try {
@@ -47,7 +47,7 @@ export async function adminPage(el, active, { adminOnly = false } = {}) {
     return null;
   }
   // Photographers have one page: vehicle photos.
-  if (ctx.isPhotographer && active !== 'shoot' && active !== 'account') {
+  if (ctx.isPhotographer && active !== 'shoot' && active !== 'account' && !photographer) {
     navigate('/admin/shoot', { replace: true });
     return null;
   }

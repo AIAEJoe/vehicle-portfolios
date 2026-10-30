@@ -232,6 +232,20 @@ export function createClient() {
         return { data: db.dealerships.map((d) => { const p = db.messaging_profiles.find((x) => x.dealership_id === d.id) || {}; const b = db.dealership_billing.find((x) => x.dealership_id === d.id) || {};
           return { id: d.id, slug: d.slug, name: d.name, a2p_status: p.a2p_status, sms_enabled: p.sms_enabled, phone: p.twilio_phone_number, email_domain: p.email_domain, email_domain_status: p.email_domain_status, billing_status: b.status, usage: usageSummary(d.id, true) }; }), error: null };
       }
+      if (fn === 'vp_sticker_chomes') {
+        const c = db.vehicle_chomes.find((x) => x.vehicle_id === args.p_vehicle_id);
+        if (!c) return { data: null, error: null };
+        const keep = ['highlight_features', 'options_packages', 'report_provider', 'prior_owners', 'accidents_count', 'accidents_summary', 'service_records',
+          'title_issues', 'title_issue_detail', 'generation_note', 'review_required', 'review_cleared_at'];
+        return { data: Object.fromEntries(keep.map((k) => [k, c[k] ?? null])), error: null };
+      }
+      if (fn === 'vp_qr_share') {
+        const v = db.vehicles.find((x) => x.id === args.p_vehicle_id);
+        if (!v) return { data: null, error: { message: 'Vehicle not found' } };
+        let sh = db.shares.find((x) => x.vehicle_id === v.id && x.channel === 'qr');
+        if (!sh) { sh = { id: uid(), code: Math.random().toString(36).slice(2, 10), vehicle_id: v.id, dealership_id: v.dealership_id, channel: 'qr', customer_name: 'QR window card', open_count: 0, created_at: now() }; db.shares.push(sh); window.__SAVE(); }
+        return { data: sh.code, error: null };
+      }
       if (fn === 'vp_apply_bg_program') {
         const vs = db.vehicles.filter((x) => args.p_vehicle_ids.includes(x.id));
         if (!vs.length) return { data: 0, error: null };
