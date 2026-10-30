@@ -63,20 +63,21 @@ const OWNER = '9d2c1f1e-0000-4000-8000-0000000000cc';
 const OP = '9d2c1f1e-0000-4000-8000-0000000000dd';
 const SALES = '9d2c1f1e-0000-4000-8000-0000000000ee';
 const PHOTO = '9d2c1f1e-0000-4000-8000-0000000000f0';
+const MGR = '9d2c1f1e-0000-4000-8000-0000000000f2';
 const CUST = '9d2c1f1e-0000-4000-8000-0000000000c1';
 const NOW = Date.now();
 const CV = '1G1YY23P6P5100917';
 const SEED = {
   users: [{ id: OWNER, email: 'owner@nsb.test', password: 'correct-horse' }, { id: OP, email: 'op@aiautoengine.test', password: 'operator-pass' },
-    { id: SALES, email: 'sales@nsb.test', password: 'sales-pass' }, { id: PHOTO, email: 'photo@lotpics.test', password: 'photo-pass' }],
+    { id: SALES, email: 'sales@nsb.test', password: 'sales-pass' }, { id: PHOTO, email: 'photo@lotpics.test', password: 'photo-pass' }, { id: MGR, email: 'manager@nsb.test', password: 'manager-pass' }],
   platform_admins: [{ user_id: OP, created_at: '2026-01-01T00:00:00Z' }],
   dealerships: [{ id: D, slug: 'nsbchevy', name: 'New Smyrna Beach Chevrolet', phone: '(386) 427-1313', sms_phone: '(386) 427-1313',
     website: 'https://www.newsmyrnachevy.com', address_line: '2375 State Road 44', city: 'New Smyrna Beach', state: 'FL', zip: '32168',
     hours: 'Mon to Sat 9am to 8pm, Sun 11am to 6pm', logo_url: '/seed/nsb-logo.png', brand_primary: '#013C9E', brand_accent: '#F4BC00',
-    default_fees_note: 'Plus $399 computerized vehicle registration fee and $998 documentation fee.' }],
+    default_fees_note: 'Plus $399 computerized vehicle registration fee and $998 documentation fee.', publish_approval: 'used' }],
   dealership_settings: [{ dealership_id: D, notify_on_open: true, open_alert_cooldown_minutes: 60, feed_auto_publish: true, feed_mark_missing_sold: true, feed_ingest_token: 'tok123', photo_feed_token: 'pftok456', lead_email: null, crm_adf_email: null }],
   dealership_members: [{ dealership_id: D, user_id: OWNER, role: 'owner', created_at: '2026-10-01T00:00:00Z' }, { dealership_id: D, user_id: SALES, role: 'sales', created_at: '2026-10-02T00:00:00Z' },
-    { dealership_id: D, user_id: PHOTO, role: 'photographer', created_at: '2026-10-30T00:00:00Z' }],
+    { dealership_id: D, user_id: PHOTO, role: 'photographer', created_at: '2026-10-30T00:00:00Z' }, { dealership_id: D, user_id: MGR, role: 'manager', created_at: '2026-10-30T00:00:00Z' }],
   dealership_billing: [{ dealership_id: D, plan_name: 'Vehicle Portfolios', monthly_fee: 995, included_sms_segments: 2500, included_emails: 5000, overage_sms_rate: 0.04, overage_email_rate: 0.005, pass_through_fixed_fees: false, allow_overage: true, status: 'active', billing_email: null, notes: null }],
   platform_settings: [{ id: 1, sms_out_segment_cost: 0.0083, sms_in_segment_cost: 0.0083, sms_carrier_fee_out: 0.0045, sms_carrier_fee_in: 0.003, mms_out_cost: 0.022, phone_number_monthly: 1.15, campaign_monthly: 10, brand_registration_fee: 46, campaign_vetting_fee: 15, email_cost: 0.0004, default_monthly_fee: 995, default_included_sms_segments: 2500, default_included_emails: 5000, default_overage_sms_rate: 0.04, default_overage_email_rate: 0.005 }],
   messaging_profiles: [{ dealership_id: D, twilio_subaccount_sid: 'ACsub', twilio_messaging_service_sid: 'MGnsb', twilio_phone_number: '+13865550000', sms_enabled: true, a2p_status: 'approved', a2p_step: 'done', a2p_log: [],
@@ -1081,6 +1082,13 @@ console.log('Dashboard');
     assert(s.crm_adf_email === 'nsbchevy@eleadtrack.net' && s.feed_url === 'https://feeds.homenet.test/nsb.csv' && s.notify_on_open === true, JSON.stringify(s));
     assert((await page.inputValue('input[aria-label="Ingest URL"]')).endsWith('/api/inventory/ingest?token=tok123'), 'ingest url');
     assert((await page.inputValue('input[aria-label="Photo feed URL"]')).endsWith('/api/feeds/photos?token=pftok456'), 'photo feed url');
+    await page.selectOption('#s-publish_approval', 'all');
+    await page.click('#approval button');
+    await page.waitForSelector('#toast >> text=Approval setting saved');
+    assert((await db()).dealerships[0].publish_approval === 'all', 'approval saved');
+    await page.selectOption('#s-publish_approval', 'used');
+    await page.click('#approval button');
+    await page.waitForSelector('#toast >> text=Approval setting saved');
     await page.check('#copyin-new');
     await page.click('#copyin-go');
     await page.waitForSelector('#copyin-out >> text=Done: 14 photos copied.');
@@ -1327,6 +1335,46 @@ console.log('Roles');
     assert(nav.includes('Inbox') && !nav.includes('Usage') && !nav.includes('Settings') && !nav.includes('Platform'), nav);
     await page.goto(`${ORIGIN}/platform`);
     await page.waitForSelector('text=Platform operators only');
+  });
+  const APPR = '9d2c1f1e-0000-4000-8000-0000000000f3';
+  await step('approval: a salesperson can\'t put an unapproved used car live', async () => {
+    await page.evaluate((id) => { window.__DB.vehicles.push({ id, dealership_id: window.__DB.dealerships[0].id, slug: '2022-chevrolet-equinox-lt', status: 'draft', condition: 'used',
+      stock_number: 'AP2201', vin: '3GNAXUEV1NL100201', year: 2022, make: 'Chevrolet', model: 'Equinox', trim: 'LT', features: [], specs: {}, price_stack: [], source: 'feed', created_at: '2026-10-30T12:00:00Z', updated_at: '2026-10-30T12:00:00Z' }); window.__SAVE(); }, APPR);
+    await page.goto(`${ORIGIN}/admin/vehicles/${APPR}`);
+    await page.waitForSelector('text=Waiting for manager approval');
+    assert(await page.isDisabled('button:has-text("Waiting for manager approval")'), 'publish disabled for sales');
+    assert((await page.textContent('main')).includes('waiting for a manager to approve it'), 'explained');
+    await page.goto(`${ORIGIN}/admin/vehicles?status=approval`);
+    await page.waitForSelector('.vrow');
+    assert((await page.textContent('#list')).includes('Equinox') && !(await page.textContent('#list')).includes('Wrangler'), 'waiting list');
+  });
+  await step('manager: sales + Photos, no Settings; approves the car', async () => {
+    await page.click('.admin-top .me');
+    await page.waitForSelector('#so'); await page.click('#so'); await page.waitForSelector('#pw');
+    await page.fill('#email', 'manager@nsb.test'); await page.fill('#password', 'manager-pass');
+    await page.click('#pw button');
+    await page.waitForSelector('.vrow');
+    const nav = await page.textContent('.admin-top nav');
+    assert(nav.includes('Vehicles') && nav.includes('Photos') && nav.includes('Leads') && nav.includes('Inbox') && !nav.includes('Settings') && !nav.includes('Usage'), nav);
+    await page.goto(`${ORIGIN}/admin/vehicles/${APPR}`);
+    await page.click('[data-status="published"]:has-text("Approve & publish")');
+    await page.waitForSelector('#toast >> text=Published');
+    const v = (await page.evaluate((id) => window.__DB.vehicles.find((x) => x.id === id), APPR));
+    assert(v.status === 'published' && v.approved_by === MGR && v.approved_at, JSON.stringify(v).slice(0, 200));
+    await page.waitForSelector('text=Approved');
+    await page.goto(`${ORIGIN}/admin/shoot`);
+    await page.fill('#stock', 'AP2201'); await page.click('#find button');
+    await page.waitForSelector('.shoot-car >> text=Camera roll');
+  });
+  await step('once approved, sales can take it down and put it back up', async () => {
+    await page.click('.admin-top .me');
+    await page.waitForSelector('#so'); await page.click('#so'); await page.waitForSelector('#pw');
+    await page.fill('#email', 'sales@nsb.test'); await page.fill('#password', 'sales-pass');
+    await page.click('#pw button');
+    await page.waitForSelector('.vrow');
+    await page.goto(`${ORIGIN}/admin/vehicles/${APPR}`);
+    await page.click('[data-status="draft"]'); await page.waitForSelector('#toast >> text=Moved to drafts');
+    await page.click('[data-status="published"]:has-text("Publish")'); await page.waitForSelector('#toast >> text=Published');
   });
   await context.close();
 }

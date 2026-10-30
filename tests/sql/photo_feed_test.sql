@@ -8,6 +8,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e'; -- sales
 select pg_temp.check((select count(*) from dealership_settings) = 0, 'sales cannot read the photo feed token');
 reset role;
+reset request.jwt.claim.sub;
 
 insert into vehicles (dealership_id, status, stock_number, vin, year, make, model)
 select id, 'published', 'PF1', '1G1YC3D46P5136227', 2023, 'Chevrolet', 'Corvette' from dealerships where slug = 'nsbchevy';

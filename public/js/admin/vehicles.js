@@ -17,7 +17,7 @@ export default async function vehicles(el) {
       <input type="search" id="q" placeholder="Search stock #, VIN, make, model" aria-label="Search">
       <select id="status" aria-label="Status">
         <option value="active">Live + drafts</option><option value="published">Live</option>
-        <option value="draft">Drafts</option><option value="sold">Sold</option><option value="all">All</option>
+        <option value="draft">Drafts</option><option value="approval">Waiting for approval</option><option value="sold">Sold</option><option value="all">All</option>
       </select>
     </div>
     <div id="list"></div>`);
@@ -32,6 +32,7 @@ export default async function vehicles(el) {
         .select('id,slug,status,condition,bg_warranty,bg_warranty_type,bg_labor_pct,bg_parts_pct,bg_deductible,bg_systems,bg_program,description,year,make,model,trim,stock_number,vin,price,mileage,source,updated_at,salesperson:staff!salesperson_id(full_name),vehicle_photos(url,position)')
         .eq('dealership_id', ctx.dealership.id).order('updated_at', { ascending: false }).limit(1000);
       if (status === 'active') q = q.in('status', ['published', 'draft']);
+      else if (status === 'approval') q = q.eq('status', 'draft').is('approved_at', null);
       else if (status !== 'all') q = q.eq('status', status);
       rows = must(await q);
       const s = must(await sb.from('vehicle_stats').select('*').eq('dealership_id', ctx.dealership.id));

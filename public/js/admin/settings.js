@@ -82,6 +82,17 @@ export default async function settings(el) {
     </form>
     <div id="wp"></div>
 
+    <form class="card" id="approval"><h2>Go-live approval</h2>
+      <label for="s-publish_approval">Before a car goes live on the website</label>
+      <select id="s-publish_approval" name="publish_approval">
+        <option value="used" ${(d.publish_approval || 'used') === 'used' ? 'selected' : ''}>A manager approves used and certified cars</option>
+        <option value="all" ${d.publish_approval === 'all' ? 'selected' : ''}>A manager approves every car, new and used</option>
+        <option value="off" ${d.publish_approval === 'off' ? 'selected' : ''}>No approval: anyone on staff can publish</option>
+      </select>
+      <div class="hint">Managers and admins approve by pressing "Approve &amp; publish" on the car. Cars the inventory feed adds wait as drafts (Vehicles → Waiting for approval). Cars already live aren't affected.</div>
+      <button class="btn" style="margin-top:12px">Save approval setting</button>
+    </form>
+
     <form class="card" id="photostd"><h2>Photo standard</h2>
       <div class="grid3"><div><label for="s-photo_min">Minimum photos per car</label><input id="s-photo_min" name="photo_min" type="number" min="1" max="100" value="${d.photo_min || 6}"></div></div>
       <div class="hint">Cars below this are flagged in the vehicle list and score lower in the photo audit.</div>
@@ -215,6 +226,15 @@ export default async function settings(el) {
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
 
+    $('#approval', main).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        d = must(await sb.from('dealerships').update({ publish_approval: new FormData(e.target).get('publish_approval') }).eq('id', D).select().single());
+        clearDealerCache(); resetAdminContext();
+        toast('Approval setting saved');
+        draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    });
     $('#photostd', main).addEventListener('submit', async (e) => {
       e.preventDefault();
       const n = Number(new FormData(e.target).get('photo_min'));

@@ -51,6 +51,8 @@ export default async function vehicleEdit(el, { id }) {
   if (!TABS.some(([k]) => k === tab)) tab = 'details';
 
   function frame() {
+    const mode = ctx.dealership.publish_approval || 'off';
+    const needsApproval = !v.approved_at && (mode === 'all' || (mode === 'used' && v.condition !== 'new'));
     const url = portfolioUrl(v);
     mount(main, html`
       <div class="page-head">
@@ -65,14 +67,18 @@ export default async function vehicleEdit(el, { id }) {
           ${v.status === 'published'
             ? html`<button class="btn alt sm" data-status="draft">Unpublish</button>`
             : v.status === 'sold' ? html`<button class="btn alt sm" data-status="published">Mark available</button>`
-            : html`<button class="btn accent sm" data-status="published">Publish</button>`}
+            : needsApproval && !ctx.canApprove ? html`<button class="btn accent sm" disabled title="A manager or admin approves cars before they go live">Waiting for manager approval</button>`
+            : html`<button class="btn accent sm" data-status="published">${needsApproval ? 'Approve & publish' : 'Publish'}</button>`}
           <a class="btn alt sm" href="${url}" target="_blank" data-external>Preview</a>
           <button class="btn alt sm" id="copy">Copy link</button>
           <a class="btn alt sm" href="/admin/vehicles/${v.id}/sticker">Window sticker</a>
           <a class="btn alt sm" href="/admin/vehicles/${v.id}/print">QR window card</a>
         </div>
       </div>
-      ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">This portfolio is a draft. Customers can't open it until you publish.</div>` : ''}
+      ${v.status !== 'published' && v.status !== 'sold' ? html`<div class="notice warn">${needsApproval
+        ? (ctx.canApprove ? 'This car is waiting for approval. Check the photos, price and Buyers Guide, then press "Approve & publish".' : 'This car is waiting for a manager to approve it. Customers can\'t open it until then.')
+        : 'This portfolio is a draft. Customers can\'t open it until you publish.'}</div>` : ''}
+      ${v.approved_at ? html`<p class="small sub" style="margin:-6px 0 10px">Approved ${dateTime(v.approved_at)}</p>` : ''}
       <div class="tabs" role="tablist">${TABS.map(([k, label]) => html`<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${label}${k === 'photos' ? html`<span class="badge">${v.vehicle_photos.length}</span>` : ''}${k === 'documents' && v.vehicle_documents.length ? html`<span class="badge">${v.vehicle_documents.length}</span>` : ''}${k === 'guide' && needsBuyersGuide(v) && (resolveGuide(v, ctx.dealership).pending || programStatus(v, ctx.dealership.bg_program) === 'missing') ? html`<span class="badge" title="Warranty data pending, or the description mentions a warranty the Buyers Guide doesn't have">!</span>` : ''}${k === 'chomes' && chomesBadge(v, chomes) ? html`<span class="badge" title="Required CHOMES fields still to fill">${chomesBadge(v, chomes)}</span>` : ''}${k === 'sticker' && stickerBadge(v) ? html`<span class="badge" title="The pricing stack doesn't match the price, so it won't print">!</span>` : ''}</button>`)}</div>
       <div id="tab"></div>`);
     drawTab();
@@ -95,6 +101,8 @@ export default async function vehicleEdit(el, { id }) {
     try {
       must(await sb.from('vehicles').update({ status }).eq('id', v.id));
       v.status = status;
+      const fresh = must(await sb.from('vehicles').select('approved_at,approved_by').eq('id', v.id).single());
+      Object.assign(v, fresh);
       toast(status === 'published' ? 'Published. Customers can open it now.' : 'Moved to drafts');
       frame();
     } catch (err) { toast(errMsg(err), 'bad'); }
@@ -210,7 +218,7 @@ export default async function vehicleEdit(el, { id }) {
   // ---------------------------------------------------------------- photos
   function photos(box) {
     const list = v.vehicle_photos;
-    const canEdit = ctx.isAdmin; // photographers use the Photos page; salespeople can look
+    const canEdit = ctx.canEditPhotos; // admins and managers here; photographers use the Photos page; salespeople can look
     const a = auditPhotos(v, list, ctx.dealership.photo_min || DEFAULT_PHOTO_MIN);
     const audit = html`<div class="card audit"><div class="audit-score ${a.score >= 85 ? 'ok' : a.score >= 60 ? 'mid' : 'low'}"><b>${a.score}</b><span>/100</span></div>
       <div><strong>Photo audit</strong> · ${a.count} of ${a.min} photos${a.meetsMinimum ? ' ✓' : ''} · ${a.captioned} captioned
@@ -224,7 +232,7 @@ export default async function vehicleEdit(el, { id }) {
       const one = (k) => rows.find((m) => m.kind === k);
       mount(el, html`<div class="card vmedia"><strong>Video &amp; 360°</strong>
         ${['spin', 'interior360', 'video'].map((k) => one(k) ? html`<button type="button" class="btn alt sm" data-vm="${one(k).id}">${MEDIA_LABEL[k]} ✓</button>` : html`<span class="small sub">${MEDIA_LABEL[k]}: none</span>`)}
-        ${ctx.isAdmin || ctx.isPhotographer ? html`<a class="small" href="/admin/shoot">Add or replace on the Photos page</a>` : ''}</div>`);
+        ${ctx.canEditPhotos ? html`<a class="small" href="/admin/shoot">Add or replace on the Photos page</a>` : ''}</div>`);
       el.querySelectorAll('[data-vm]').forEach((b) => b.addEventListener('click', () => openMedia(rows.find((m) => m.id === b.dataset.vm), vTitle(v))));
     }, () => {});
     if (!canEdit) {

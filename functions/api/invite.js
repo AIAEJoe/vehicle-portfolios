@@ -7,7 +7,7 @@ export const onRequestPost = handle(async ({ request, env }) => {
   const body = await request.json().catch(() => ({}));
   const email = String(body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email address');
-  const role = ['admin', 'sales', 'photographer'].includes(body.role) ? body.role : 'sales';
+  const role = ['admin', 'manager', 'sales', 'photographer'].includes(body.role) ? body.role : 'sales';
   if (role === 'admin' && user.vp_role !== 'owner' && user.vp_role !== 'admin') throw new HttpError(403, 'Only admins can add admins');
 
   let userId = null;
