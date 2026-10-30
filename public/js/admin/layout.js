@@ -15,7 +15,8 @@ export async function adminContext() {
   const staff = must(await sb.from('staff').select('*').eq('dealership_id', dealership.id).eq('user_id', session.user.id).maybeSingle());
   const op = must(await sb.from('platform_admins').select('user_id').eq('user_id', session.user.id).maybeSingle());
   const role = member ? member.role : op ? 'support' : null;
-  ctxCache = { user: session.user, dealership, role, isAdmin: ['owner', 'admin', 'support'].includes(role), isPhotographer: role === 'photographer', isPlatform: !!op, me: staff };
+  ctxCache = { user: session.user, dealership, role, isAdmin: ['owner', 'admin', 'support'].includes(role), isPhotographer: role === 'photographer', isManager: role === 'manager',
+    canApprove: ['owner', 'admin', 'support', 'manager'].includes(role), canEditPhotos: ['owner', 'admin', 'support', 'manager', 'photographer'].includes(role), isPlatform: !!op, me: staff };
   return ctxCache;
 }
 
@@ -60,7 +61,7 @@ export async function adminPage(el, active, { adminOnly = false, photographer = 
       <a class="brand" href="/admin">Vehicle Portfolios <small>${config.dealer}</small></a>
       <nav>${ctx.isPhotographer ? link('/admin/shoot', 'Photos', 'shoot') : html`
         ${link('/admin/vehicles', 'Vehicles', 'vehicles')}
-        ${ctx.isAdmin ? link('/admin/shoot', 'Photos', 'shoot') : ''}
+        ${ctx.canEditPhotos ? link('/admin/shoot', 'Photos', 'shoot') : ''}
         <a href="/admin/inbox" class="${active === 'inbox' ? 'on' : ''}">Inbox<span id="unread-badge"></span></a>
         ${link('/admin/leads', 'Leads', 'leads')}
         ${link('/admin/staff', 'Staff', 'staff')}

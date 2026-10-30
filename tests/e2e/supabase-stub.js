@@ -43,6 +43,19 @@ function isOperator() {
   return !!(s && db.platform_admins.some((p) => p.user_id === s.user.id));
 }
 
+// vp_vehicle_publish_gate: approval can't be written by hand; managers/admins publishing approve; others need approval.
+function publishGate(row, patch) {
+  delete patch.approved_at; delete patch.approved_by;
+  if (patch.status !== 'published' || row.status === 'published') return;
+  const sess = JSON.parse(localStorage.getItem('stub-session') || 'null');
+  const me = sess && db.dealership_members.find((m) => m.user_id === sess.user.id && m.dealership_id === row.dealership_id);
+  const d = db.dealerships.find((x) => x.id === row.dealership_id) || {};
+  const mode = d.publish_approval || 'off';
+  const needs = mode === 'all' || (mode === 'used' && row.condition !== 'new');
+  if (me && ['owner', 'admin', 'manager'].includes(me.role)) { if (!row.approved_at) { row.approved_at = now(); row.approved_by = sess.user.id; } return; }
+  if (needs && !row.approved_at) throw new Error('A manager needs to approve this car before it goes live.');
+}
+
 function checkCol(table, col) {
   const cols = SCHEMA[table];
   if (cols && !cols.includes(col)) throw new Error(`STUB: column "${col}" does not exist on ${table}`);
@@ -142,6 +155,7 @@ class Query {
     const re = new RegExp('^' + String(pat).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$', 'i');
     this.filters.push((r) => r[c] != null && re.test(String(r[c]))); return this;
   }
+  is(c, v) { checkCol(this.table, c); this.filters.push((r) => (v === null ? r[c] == null : r[c] === v)); return this; }
   gt(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] > v); return this; }
   gte(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] >= v); return this; }
   lt(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] < v); return this; }
@@ -177,6 +191,7 @@ class Query {
           Object.keys(this.payload).forEach((k) => checkCol(this.table, k));
           rows.forEach((r) => {
             const before = { ...r };
+            if (this.table === 'vehicles') publishGate(r, this.payload); // mirrors vp_vehicle_publish_gate (0016)
             Object.assign(r, this.payload, { updated_at: now() });
             if (this.table === 'vehicle_chomes') stampChomes(r, before);
             if (this.table === 'vehicles') stampVehicle(r, before, 'staff');

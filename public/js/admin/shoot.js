@@ -29,7 +29,7 @@ export default async function shoot(el, params, token = {}) {
   const { ctx, main } = page;
   const D = ctx.dealership.id;
   const MIN = ctx.dealership.photo_min || DEFAULT_PHOTO_MIN;
-  const canEdit = ctx.isAdmin || ctx.isPhotographer;
+  const canEdit = ctx.canEditPhotos;
   document.title = `Photos | ${ctx.dealership.name}`;
 
   if (!canEdit) {

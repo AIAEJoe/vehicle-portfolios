@@ -169,6 +169,10 @@ Per-dealership plan options:
 
 **Getting staff signed in.** Invites and sign-in links are one-time and expire. If one fails, the sign-in page now says why (it keeps Supabase's error from the link). Staff can tap *Email me a sign-in link*, and admins can use **Send sign-in link** next to anyone on the Staff page. Either way, the link opens *Your account* to set a password.
 
+**Roles** (Staff → Dashboard logins): **Owner/Admin** everything; **Manager** everything a salesperson does (vehicles, sharing, leads, inbox) plus everything a photographer does (Photos page, photos, video & 360°), and approves cars to go live, but not Settings, Usage or Staff logins; **Sales** vehicles, sharing, leads, inbox, photos view-only; **Photographer** the Photos page only (`0016_manager_role.sql`: `vp_is_manager()`, `vp_can_edit_photos()` includes managers; server functions accept managers wherever sales are allowed).
+
+**Go-live approval** (Settings → *Go-live approval*; `dealerships.publish_approval` = `used` by default, or `all` / `off`). A car that needs approval and hasn't had it can only be published by a manager or admin: the button reads *Approve & publish*, and the trigger `vp_vehicle_publish_gate` records `approved_by` / `approved_at` (they can't be written by hand). Salespeople see *Waiting for manager approval*, and Vehicles → *Waiting for approval* lists those cars. Once approved, anyone on staff can unpublish and republish it. New cars from the inventory feed arrive as drafts while approval applies to them. Cars already live aren't affected.
+
 **Photographer logins** (Staff → invite, role *Photographer*) only get the Photos page and their Account page. In the database (`0009_photographer.sql`), photographers aren't counted by `vp_is_member()`, so prices, leads, customers, messages, CHOMES, factory data and settings stay closed to them. They can read the dealership's vehicles, add `upload` photos as themselves, reorder, caption and delete any of the car's photos, and upload files only to `<dealership>/vehicles/<vehicle>/<file>.jpg|png|webp|heic`. Salespeople don't get the Photos page; admins do.
 
 **Printing on the lot.** Once a car is found, the Photos page has **🖨 Window sticker** and **🖨 Buyers Guide** (used/CPO) buttons; they open in a new tab so uploads keep going, and print from the phone (Share → Print / AirPrint). For photographers, the sticker page gets the car's customer-safe CHOMES facts through `vp_sticker_chomes()` (never recon cost, notes, demand note, inspector or provenance) and its tracked QR link through `vp_qr_share()` (`0010_photographer_print.sql`). They still can't read CHOMES or shares directly, and other admin pages (like the QR window card) stay closed to them.
@@ -225,6 +229,7 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    - `supabase/migrations/0013_photo_feed.sql` (photo feed for third-party sites). On an existing install, run `supabase/run-2026-10-30h.sql`; also safe to run twice.
    - `supabase/migrations/0014_vehicle_media.sql` (walkaround video and 360°). On an existing install, run `supabase/run-2026-10-30i.sql`; also safe to run twice.
    - `supabase/migrations/0015_copy_in_photos.sql` (copy SlipStream photos in). On an existing install, run `supabase/run-2026-10-30j.sql`; also safe to run twice.
+   - `supabase/migrations/0016_manager_role.sql` (Manager role, go-live approval). On an existing install, run `supabase/run-2026-10-30k.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -300,7 +305,7 @@ bash tests/sql/run.sh                  # 221 checks: RLS isolation between store
                                        #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program, photographer role
 node --test tests/functions/*.test.js  # 85 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding, warranty program): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 86 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide (letter), CHOMES, window stickers (equipment, B&W), factory data, warranty program, photo banners, photographer (phone), video & 360°, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 89 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide (letter), CHOMES, window stickers (equipment, B&W), factory data, warranty program, photo banners, photographer (phone), video & 360°, manager & approval, inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.

@@ -95,7 +95,7 @@ export async function getSettings(env, dealershipId) {
 }
 
 /** Verifies the caller's Supabase session and (optionally) their role at a dealership. */
-export async function requireUser(request, env, dealershipId, roles = ['owner', 'admin', 'sales']) {
+export async function requireUser(request, env, dealershipId, roles = ['owner', 'admin', 'manager', 'sales']) {
   const auth = request.headers.get('authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token) throw new HttpError(401, 'Sign in required');
@@ -147,7 +147,7 @@ export async function requirePlatformAdmin(request, env) {
 }
 
 /** Members of the dealership, or platform operators (support access). */
-export async function requireDealerAccess(request, env, dealershipId, roles = ['owner', 'admin', 'sales']) {
+export async function requireDealerAccess(request, env, dealershipId, roles = ['owner', 'admin', 'manager', 'sales']) {
   const { user, token } = await requireUser(request, env, null);
   const admin = await sb(env, `/rest/v1/platform_admins?user_id=eq.${user.id}&select=user_id`);
   if (admin.length) { user.vp_role = 'platform'; return { user, token }; }
