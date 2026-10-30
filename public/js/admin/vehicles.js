@@ -1,6 +1,7 @@
 import { sb, html, mount, must, money, miles, vTitle, timeAgo, $, errMsg } from '../core.js';
 import { adminPage, STATUS_LABEL } from './layout.js';
 import { resolveGuide, needsBuyersGuide } from '../buyers-guide.js';
+import { programStatus } from '../warranty-program.js';
 
 export default async function vehicles(el) {
   const page = await adminPage(el, 'vehicles');
@@ -27,7 +28,7 @@ export default async function vehicles(el) {
     $('#list', main).innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
       let q = sb.from('vehicles')
-        .select('id,slug,status,condition,bg_warranty,year,make,model,trim,stock_number,vin,price,mileage,source,updated_at,salesperson:staff!salesperson_id(full_name),vehicle_photos(url,position)')
+        .select('id,slug,status,condition,bg_warranty,bg_warranty_type,bg_labor_pct,bg_parts_pct,bg_deductible,bg_systems,bg_program,description,year,make,model,trim,stock_number,vin,price,mileage,source,updated_at,salesperson:staff!salesperson_id(full_name),vehicle_photos(url,position)')
         .eq('dealership_id', ctx.dealership.id).order('updated_at', { ascending: false }).limit(1000);
       if (status === 'active') q = q.in('status', ['published', 'draft']);
       else if (status !== 'all') q = q.eq('status', status);
@@ -59,7 +60,9 @@ export default async function vehicles(el) {
             <div class="meta"><span class="pill ${v.status}">${STATUS_LABEL[v.status]}</span>
               ${v.stock_number ? ` Stock ${v.stock_number}` : ''}${v.price ? ` · ${money(v.price)}` : ''}${v.mileage != null ? ` · ${miles(v.mileage)} mi` : ''}
               ${v.salesperson ? ` · ${v.salesperson.full_name}` : ''}${v.source === 'feed' ? ' · feed' : ''}
-              ${needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html` <span class="pill contacted" title="No warranty terms entered. Customers see the As Is Buyers Guide.">Warranty data pending</span>` : ''}</div>
+              ${needsBuyersGuide(v) && programStatus(v, ctx.dealership.bg_program) === 'missing'
+                ? html` <span class="pill sold" title="The description mentions the ${ctx.dealership.bg_program.name}, but the Buyers Guide doesn't include it.">Warranty missing from Buyers Guide</span>`
+                : needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html` <span class="pill contacted" title="No warranty terms entered. Customers see the As Is Buyers Guide.">Warranty data pending</span>` : ''}</div>
           </div>
           <div class="stats"><strong>${st.views || 0}</strong> ${st.views === 1 ? 'open' : 'opens'} · <strong>${st.leads || 0}</strong> ${st.leads === 1 ? 'lead' : 'leads'}
             <br>${st.last_viewed_at ? `Last opened ${timeAgo(st.last_viewed_at)}` : `Updated ${timeAgo(v.updated_at)}`}</div>

@@ -430,3 +430,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .fs-foot { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 6px; font-size: 8pt; color: #333; }
 @media print { .fs { border: 0; margin: 0; padding: 0; } }
 @media screen and (max-width: 8.4in) { .fs { zoom: .46; } }
+
+/* ---------- Dealer warranty program ---------- */
+.wp-sys { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: start; margin-bottom: 8px; }
+@media (max-width: 640px) { .wp-sys { grid-template-columns: 1fr auto; } .wp-sys textarea { grid-column: 1; } }
+.wp-list { display: grid; gap: 2px; max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; }
+.wp-car { align-items: flex-start !important; padding: 6px 0; border-bottom: 1px solid var(--line); margin: 0; font-weight: 500; }
+.wp-car:last-child { border-bottom: 0; } .wp-car input { margin-top: 4px; }
+.wp-warn { color: var(--bad); font-weight: 600; }
+.ws-warranty { margin-top: 12px; border: 2px solid var(--ws-brand); border-radius: 8px; padding: 8px 10px; }
+.ws-warranty strong { display: block; font-size: 12.5pt; color: var(--ws-brand); }
+.ws-warranty span { font-size: 9pt; color: #333; }

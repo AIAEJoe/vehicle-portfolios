@@ -136,6 +136,15 @@ Per-dealership plan options:
 
 ---
 
+## Dealer warranty program (Lifetime Limited Powertrain Warranty)
+
+Settings → **Dealer warranty program**. The program's terms are set once and then applied to cars after an admin reviews the list. Nothing is read off a description and put on a Buyers Guide on its own.
+- **Starting terms** come from NSB's form TWS-LW-AMSI F (06/24). It's provided by the dealer at no charge, and the form says it's "not a Service Contract and is not insurance", so on the Buyers Guide it's a **Dealer warranty, Limited**. The dealer pays 100% of labor and parts. There's a $100 deductible per covered repair. The duration is for as long as the original purchaser owns the vehicle (not transferable), subject to the maintenance and inspection requirements.
+- **Covered systems:** the form covers the parts the manufacturer designates as powertrain, but the FTC doesn't allow "powertrain" on its own, so each system is named (engine, transmission/transaxle, drive axles). That wording is a proposed summary; **confirm it with Total Warranty Services or compliance**. The database rejects "power train"/"drive train" shorthand here too.
+- **Review and apply:** Settings lists every used car whose description mentions the program (words in any order, "limited" ignored) but whose Buyers Guide doesn't have it. It also lists cars carrying older terms. An admin ticks the cars and applies (`vp_apply_bg_program`): admins only, used/certified only, and the existing Buyers Guide rules apply. Reprint those Buyers Guides afterwards.
+- **Flags:** a car whose ad mentions the program without having it shows "Warranty missing from Buyers Guide" in the vehicle list, plus a "!" and an *Apply* button on its Buyers Guide tab.
+- **Dealer sticker:** prints the program line (e.g. "Lifetime Limited Powertrain Warranty included · coverage, deductible and conditions are on the Buyers Guide") only while the car's Buyers Guide carries the program. Switching a car to As Is removes the label.
+
 ## Window stickers
 
 **Dealer window sticker** (`/admin/vehicles/<id>/sticker`, US Letter portrait; print at 100%). Built only from customer-safe data:
@@ -169,6 +178,7 @@ Per-dealership plan options:
    - `supabase/migrations/0005_chomes.sql` (CHOMES). On an existing install, run `supabase/run-2026-10-23.sql` instead; it's the same and safe to run twice.
    - `supabase/migrations/0006_window_stickers.sql` (window stickers). On an existing install, run `supabase/run-2026-10-30.sql`; also safe to run twice.
    - `supabase/migrations/0007_factory_data.sql` (factory data from the VIN). On an existing install, run `supabase/run-2026-10-30b.sql`; also safe to run twice.
+   - `supabase/migrations/0008_warranty_program.sql` (dealer warranty program). On an existing install, run `supabase/run-2026-10-30c.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -238,11 +248,11 @@ If you register a dealership in the Twilio Console instead, paste the SIDs under
 ## Tests
 
 ```bash
-bash tests/sql/run.sh                  # 176 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
-                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy
-node --test tests/functions/*.test.js  # 80 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
+bash tests/sql/run.sh                  # 189 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
+                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program
+node --test tests/functions/*.test.js  # 84 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding, warranty program): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 71 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 74 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.
