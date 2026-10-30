@@ -38,11 +38,11 @@ export default async function staffPage(el) {
         ${members.map((m) => html`<div class="share-item"><span>${m.email} <span class="pill">${m.role}</span>
           ${people.find((p) => p.user_id === m.user_id) ? '' : html`<span class="small sub"> · not linked to a salesperson</span>`}</span>
           ${m.user_id !== ctx.user.id && m.role !== 'owner' ? html`<span class="btn-row">
-            <select data-role="${m.user_id}" style="width:auto;min-height:34px;padding:4px 8px" aria-label="Role"><option value="sales" ${m.role === 'sales' ? 'selected' : ''}>Sales</option><option value="admin" ${m.role === 'admin' ? 'selected' : ''}>Admin</option></select>
+            <select data-role="${m.user_id}" style="width:auto;min-height:34px;padding:4px 8px" aria-label="Role"><option value="sales" ${m.role === 'sales' ? 'selected' : ''}>Sales</option><option value="admin" ${m.role === 'admin' ? 'selected' : ''}>Admin</option><option value="photographer" ${m.role === 'photographer' ? 'selected' : ''}>Photographer</option></select>
             <button class="btn danger sm" data-remove="${m.user_id}">Remove</button></span>` : ''}</div>`)}
         <form id="invite" style="margin-top:14px"><h3 style="font-size:16px;margin-bottom:0">Invite someone</h3>
           <div class="grid3"><div><label for="ie">Email</label><input id="ie" name="email" type="email" required></div>
-          <div><label for="ir">Role</label><select id="ir" name="role"><option value="sales">Sales (vehicles, sharing, leads)</option><option value="admin">Admin (everything)</option></select></div>
+          <div><label for="ir">Role</label><select id="ir" name="role"><option value="sales">Sales (vehicles, sharing, leads)</option><option value="admin">Admin (everything)</option><option value="photographer">Photographer (vehicle photos only)</option></select></div>
           <div><label for="is">Link to salesperson</label><select id="is" name="staff_id"><option value="">None</option>${people.filter((p) => !p.user_id).map((p) => html`<option value="${p.id}">${p.full_name}</option>`)}</select></div></div>
           <button class="btn" style="margin-top:12px">Send invite</button>
           <p class="hint">They'll get an email to set a password. Turn off public sign-ups in Supabase so only invited people can join.</p>

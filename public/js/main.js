@@ -19,6 +19,7 @@ if (!configured) {
   route('/admin/vehicles/:id/print', () => import('./admin/print.js'));
   route('/admin/vehicles/:id/sticker', () => import('./admin/sticker-print.js'));
   route('/admin/vehicles/:id/factory-sheet', () => import('./admin/factory-sheet.js'));
+  route('/admin/shoot', () => import('./admin/shoot.js'));
   route('/admin/leads', () => import('./admin/leads.js'));
   route('/admin/staff', () => import('./admin/staff.js'));
   route('/admin/settings', () => import('./admin/settings.js'));

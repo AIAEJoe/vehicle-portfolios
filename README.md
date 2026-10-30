@@ -136,6 +136,16 @@ Per-dealership plan options:
 
 ---
 
+## Photos on the lot (photographer)
+
+**Photos** (`/admin/shoot`) is a phone-first page for whoever shoots the inventory:
+1. Type the **stock number** (any case, "#" and spaces ignored), or the **last 6 of the VIN**, and tap **Find**. Live and draft cars are searched.
+2. Check the car on screen against the key tag, then tap **📷 Take photos**. The phone's own camera opens (`capture="environment"`). Each shot is resized and uploads to that car in the background. **Add from camera roll** takes several at once.
+3. **Put these photos first** is ticked when the car has only stock/feed photos, so the first shot becomes the cover, in shooting order. Untick it to add photos after the existing ones.
+4. **Done, next car.** Uploads still running stay with the car they were taken for. Failed uploads retry by themselves (2s, 6s, 15s, 30s, and again when the phone comes back online), then offer **Try again**. Leaving the page with uploads pending asks first.
+
+**Photographer logins** (Staff → invite, role *Photographer*) only get the Photos page and their Account page. In the database (`0009_photographer.sql`), photographers aren't counted by `vp_is_member()`, so prices, leads, customers, messages, CHOMES, factory data and settings stay closed to them. They can read the dealership's vehicles, add `upload` photos as themselves, delete only their own photos, and upload files only to `<dealership>/vehicles/<vehicle>/<file>.jpg|png|webp|heic`. Everyone else on staff can use the Photos page too.
+
 ## Dealer warranty program (Lifetime Limited Powertrain Warranty)
 
 Settings → **Dealer warranty program**. The program's terms are set once and then applied to cars after an admin reviews the list. Nothing is read off a description and put on a Buyers Guide on its own.
@@ -179,6 +189,7 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    - `supabase/migrations/0006_window_stickers.sql` (window stickers). On an existing install, run `supabase/run-2026-10-30.sql`; also safe to run twice.
    - `supabase/migrations/0007_factory_data.sql` (factory data from the VIN). On an existing install, run `supabase/run-2026-10-30b.sql`; also safe to run twice.
    - `supabase/migrations/0008_warranty_program.sql` (dealer warranty program). On an existing install, run `supabase/run-2026-10-30c.sql`; also safe to run twice.
+   - `supabase/migrations/0009_photographer.sql` (photographer logins). On an existing install, run `supabase/run-2026-10-30e.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -248,11 +259,11 @@ If you register a dealership in the Twilio Console instead, paste the SIDs under
 ## Tests
 
 ```bash
-bash tests/sql/run.sh                  # 189 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
-                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program
+bash tests/sql/run.sh                  # 208 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
+                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program, photographer role
 node --test tests/functions/*.test.js  # 84 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding, warranty program): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 74 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 80 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, photographer (phone), inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.
