@@ -1,5 +1,5 @@
 // Window sticker logic shared by the sticker tab, the printed sticker and the tests. No browser or database imports.
-import { computeChomes, VS_AVERAGE_LABEL, CHOMES_CREDIT } from './chomes.js';
+import { computeChomes, VS_AVERAGE_LABEL } from './chomes.js';
 
 export const STACK_KINDS = [['discount', 'Discount'], ['rebate', 'Rebate'], ['addon', 'Add-on']];
 const cents = (n) => Math.round(Number(n) * 100);
@@ -36,9 +36,9 @@ export function stickerStory(v, rec, today = new Date()) {
   const r = rec && !rec.error ? rec : null;
   const highlights = (r && r.highlight_features && r.highlight_features.length ? r.highlight_features : (v.features || [])).slice(0, 8);
   const options = r ? (r.options_packages || []).slice(0, 14) : [];
-  if (!used || !r) return { highlights, options, story: null, held: false, credit: null };
+  if (!used || !r) return { highlights, options, story: null, held: false };
   const held = !!r.review_required && !r.review_cleared_at;
-  if (held) return { highlights, options, story: null, held: true, credit: null };
+  if (held) return { highlights, options, story: null, held: true };
   const c = computeChomes(v, r, today).values;
   const provider = { carfax: 'CARFAX', autocheck: 'AutoCheck' }[r.report_provider];
   const per = provider ? ` (${provider} report)` : '';
@@ -53,7 +53,7 @@ export function stickerStory(v, rec, today = new Date()) {
   if (provider && r.service_records) story.push(['Service', `${r.service_records} service record${r.service_records === 1 ? '' : 's'}${per}`]);
   if (provider && r.title_issues === false) story.push(['Title', `No title issues reported${per}`]);
   if (r.title_issues === true) story.push(['Title', `${r.title_issue_detail}${per}`]);
-  return { highlights, options, story: story.length ? story : null, held: false, credit: story.length ? CHOMES_CREDIT : null };
+  return { highlights, options, story: story.length ? story : null, held: false };
 }
 
 // ---------- reading option packages off a factory (Monroney) sticker ----------

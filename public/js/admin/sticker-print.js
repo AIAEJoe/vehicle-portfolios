@@ -105,7 +105,6 @@ export default async function stickerPrint(el, { id }) {
         ${used ? html`<p><strong>Warranty:</strong> see the FTC Buyers Guide displayed on this vehicle.</p>`
           : html`<p><strong>Dealer sticker.</strong> The manufacturer's window sticker (Monroney label) is displayed separately on this vehicle.</p>`}
         ${d.sticker_disclaimer ? html`<p>${d.sticker_disclaimer}</p>` : ''}
-        ${st.credit ? html`<p class="ws-credit">${st.credit}</p>` : ''}
       </footer>
     </article>`);
   main.querySelectorAll('[data-bw]').forEach((b) => b.addEventListener('click', () => {
