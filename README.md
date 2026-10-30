@@ -149,6 +149,8 @@ Per-dealership plan options:
 4. **Arrange** lists every photo: ▲/▼ reorder, ★ makes a photo the cover, add a short caption, 🗑 deletes the photo and its file. Display order is never locked, before or after the car goes live.
 5. **Done, next car.** Uploads still running stay with the car they were taken for. Failed uploads retry by themselves (2s, 6s, 15s, 30s, and again when the phone comes back online), then offer **Try again**. Leaving the page with uploads pending asks first.
 
+**Copy SlipStream photos in** (Settings → *Copy SlipStream photos in*, `POST /api/photos/copy-in`, `0015_copy_in_photos.sql`). Downloads every feed, listing and pasted-URL photo (SlipStream's, hosted by HomeNet) into the media bucket, server side, and turns each into our own photo (`source = 'upload'`, `copied_from` = the old address), keeping the order. Used and certified cars only unless *Include new cars* is ticked (new cars' feed photos are usually GM stock images). Settings calls it in batches of 12 until done and lists any photo that couldn't be downloaded; it's safe to run again. Afterwards those cars count as shot: their photos go out in the photo feed, and the hourly inventory feed no longer adds HomeNet's copies to them. Run it before SlipStream is cancelled, while its photo links still work.
+
 **Video & 360°** (Photos page → *Video & 360°*, `0014_vehicle_media.sql`, `public/js/admin/shoot-media.js`). Each car keeps one of each; a new one replaces the old (and its files).
 - **Walkaround video:** *Record* films in the page at 720p, about 2.5 Mbit/s, up to 2 minutes (about 40 MB), with or without sound (MP4 where the phone supports it, else WebM). *From roll* takes a clip already on the phone, up to 45 MB (a phone's own 4K video is usually far bigger, so record in the page). A poster frame is saved with it.
 - **Exterior 360° spin:** *Shoot spin* opens the camera for 24 shots; each shot shows the previous one faintly so the next lines up, and the last few show the first so the circle closes. *From roll* takes 8 to 72 photos in file-name order. Frames are resized to 1280 px.
@@ -222,6 +224,7 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    - `supabase/migrations/0011_photo_workflow.sql` (photo editing rules, captions, photo standard, sticker equipment lists) and `supabase/migrations/0012_vehicle_banners.sql` (photo banners). On an existing install, run `supabase/run-2026-10-30g.sql`, which is both; also safe to run twice.
    - `supabase/migrations/0013_photo_feed.sql` (photo feed for third-party sites). On an existing install, run `supabase/run-2026-10-30h.sql`; also safe to run twice.
    - `supabase/migrations/0014_vehicle_media.sql` (walkaround video and 360°). On an existing install, run `supabase/run-2026-10-30i.sql`; also safe to run twice.
+   - `supabase/migrations/0015_copy_in_photos.sql` (copy SlipStream photos in). On an existing install, run `supabase/run-2026-10-30j.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
