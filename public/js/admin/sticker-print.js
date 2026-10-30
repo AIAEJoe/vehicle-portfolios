@@ -18,7 +18,7 @@ async function qrSvg(text) {
 
 const signed = (n) => (n < 0 ? `−${money(-n)}` : `+${money(n)}`);
 
-export default async function stickerPrint(el, { id }) {
+export default async function stickerPrint(el, { id }, token = {}) {
   const page = await adminPage(el, 'vehicles', { photographer: true });
   if (!page) return;
   const { ctx, main } = page;
@@ -99,7 +99,7 @@ export default async function stickerPrint(el, { id }) {
         </section>
       </div>
       ${lists.length ? html`<section class="ws-equip"><h2>Equipment${equipment && equipment.as_built ? '' : html` <span class="ws-equip-note">standard for this model and trim</span>`}</h2>
-        <div class="ws-equip-cols">${lists.map(([title, items]) => html`<div class="ws-equip-col"><h3>${title}</h3><ul>${items.map((x) => html`<li>${x}</li>`)}</ul></div>`)}</div></section>` : ''}
+        <div class="ws-equip-cols">${lists.map(([title, items]) => html`<div class="ws-equip-col"><div class="ws-eq-start"><h3>${title}</h3><div class="ws-eq-i">${items[0]}</div></div>${items.slice(1).map((x) => html`<div class="ws-eq-i">${x}</div>`)}</div>`)}</div></section>` : ''}
       <footer class="ws-foot">
         ${website ? html`<div class="ws-web">${website}</div>` : ''}
         ${used ? html`<p><strong>Warranty:</strong> see the FTC Buyers Guide displayed on this vehicle.</p>`
@@ -107,10 +107,38 @@ export default async function stickerPrint(el, { id }) {
         ${d.sticker_disclaimer ? html`<p>${d.sticker_disclaimer}</p>` : ''}
       </footer>
     </article>`);
+  fitOnePage($('.ws', main));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitOnePage($('.ws', main)));
+  const again = () => fitOnePage($('.ws', main));
+  window.addEventListener('beforeprint', again);
+  token.cleanup = () => window.removeEventListener('beforeprint', again);
   main.querySelectorAll('[data-bw]').forEach((b) => b.addEventListener('click', () => {
     const on = b.dataset.bw === '1';
     $('.ws', main).classList.toggle('ws-bw', on);
     main.querySelectorAll('[data-bw]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     store('sticker-bw', on ? '1' : '0');
   }));
+}
+
+// The sticker must always print on ONE letter page, however long the car's equipment lists are. Measure the
+// sticker's natural height against its width (a ratio, so the phone's zoomed preview measures the same as paper),
+// then tighten in steps; if it's still too tall, scale the whole sticker down for printing.
+const FIT_STEPS = ['ws-fit-1', 'ws-fit-2', 'ws-fit-3'];
+const MAX_RATIO = 10.15 / 7.8; // printable letter area at our margins, with a little room to spare
+export function fitOnePage(ws) {
+  if (!ws || !ws.isConnected) return;
+  ws.classList.remove(...FIT_STEPS);
+  ws.style.removeProperty('--ws-zoom');
+  const ratio = () => {
+    ws.classList.add('ws-measure');
+    const r = ws.getBoundingClientRect();
+    ws.classList.remove('ws-measure');
+    return r.width ? r.height / r.width : 0;
+  };
+  for (const step of FIT_STEPS) {
+    if (ratio() <= MAX_RATIO) return;
+    ws.classList.add(step);
+  }
+  const r = ratio();
+  if (r > MAX_RATIO) ws.style.setProperty('--ws-zoom', String(Math.floor((MAX_RATIO / r) * 1000) / 1000));
 }

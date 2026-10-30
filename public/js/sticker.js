@@ -147,7 +147,7 @@ export function equipmentLists(eq) {
     const line = `${c.name}: ${c.value}`;
     (/tire|wheel/i.test(c.name) ? out.Exterior : out.Standard).push(line);
   }
-  for (const o of eq.optional || []) out.Standard.unshift(`${o.name} (option)`);
+  out.Standard.unshift(...(eq.optional || []).map((o) => `${o.name} (option)`)); // options first, in factory order
   const seen = new Set();
   return Object.entries(out).map(([k, items]) => [k, items.filter((x) => { const key = `${k}|${x.toLowerCase()}`; if (seen.has(key)) return false; seen.add(key); return true; })])
     .filter(([, items]) => items.length);
