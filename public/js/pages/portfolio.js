@@ -5,6 +5,7 @@ import {
 } from '../core.js';
 import { siteHeader, siteFooter } from './site.js';
 import { programBanner } from '../warranty-program.js';
+import { vehicleBanner, loadBanners } from '../banners.js';
 import { renderBuyersGuide, needsBuyersGuide } from '../buyers-guide.js';
 
 const DOC_LABELS = {
@@ -19,7 +20,7 @@ const DOC_LABELS = {
 export default async function portfolio(el, { slug }) {
   mount(el, loadingView());
   const shareCode = new URLSearchParams(location.search).get('s');
-  let d, v, share = null, staff = null, smsInfo = null;
+  let d, v, share = null, staff = null, smsInfo = null, rules = [];
   try {
     d = await loadDealership();
     v = must(await sb.from('vehicles')
@@ -27,12 +28,14 @@ export default async function portfolio(el, { slug }) {
       .eq('dealership_id', d.id).eq('slug', slug).maybeSingle());
     if (!v) throw new Error('This vehicle portfolio is not available. It may have been removed.');
     const smsP = sb.rpc('vp_public_sms_info', { p_slug: d.slug });
+    const rulesP = loadBanners(d.id);
     if (shareCode) {
       const { data } = await sb.rpc('vp_share_public', { p_code: shareCode });
       if (data && data.vehicle_id === v.id) share = data;
     }
     const staffId = (share && share.staff_id) || v.salesperson_id;
     smsInfo = (await smsP).data;
+    rules = await rulesP;
     if (staffId) {
       const { data } = await sb.from('staff').select('id,full_name,title,phone,email,photo_url').eq('id', staffId).maybeSingle();
       staff = data;
@@ -44,6 +47,7 @@ export default async function portfolio(el, { slug }) {
   }
 
   const banner = v.condition !== 'new' ? programBanner(v, d.bg_program) : null;
+  const promo = vehicleBanner(v, rules);
   const photos = (v.vehicle_photos || []).sort((a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at)));
   const docs = v.vehicle_documents || [];
   const title = vTitle(v);
@@ -83,6 +87,7 @@ export default async function portfolio(el, { slug }) {
       <div class="gallery-main" id="gal">
         <img id="gal-img" src="${photos[0].url}" alt="${title} photo 1" fetchpriority="high">
         ${banner ? html`<div class="wbanner" id="wbanner"><strong>${banner.text}</strong>${banner.note ? html`<span>${banner.note}</span>` : ''}</div>` : ''}
+        ${promo ? html`<div class="pbanner" id="pbanner"><strong>${promo.text}</strong>${promo.note ? html`<span>${promo.note}</span>` : ''}</div>` : ''}
         ${photos.length > 1 ? html`<button class="nav prev" data-step="-1" aria-label="Previous photo">‹</button>
         <button class="nav next" data-step="1" aria-label="Next photo">›</button>` : ''}
         <span class="count" id="gal-count">1 / ${photos.length}</span>
@@ -188,6 +193,8 @@ export default async function portfolio(el, { slug }) {
     $('#gal-count', el).textContent = `${idx + 1} / ${photos.length}`;
     const wb = $('#wbanner', el);
     if (wb) wb.hidden = idx !== 0; // the banner belongs to the first photo
+    const pb = $('#pbanner', el);
+    if (pb) pb.hidden = idx !== 0;
     $$('#thumbs button', el).forEach((b, j) => b.classList.toggle('on', j === idx));
     const on_ = $(`#thumbs button[data-i="${idx}"]`, el);
     if (on_) on_.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });

@@ -306,11 +306,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .bg-admin-flag { display: none; }
 @media (max-width: 560px) { .bg-side { padding: 10px; font-size: 11.5px; } .bg-big { font-size: 18px; } .bg-vehicle { grid-template-columns: 1fr 1fr; } .bg-title { font-size: 22px; } }
 
-/* Printed window guide: 100% black on white stock no smaller than 11" high x 7¼" wide (§ 455.2(a)(2)). */
+/* Printed window guide: 100% black on white stock no smaller than 11" high x 7¼" wide (§ 455.2(a)(2)); printed on letter paper below. */
 .bg-print-page { background: #fff; padding: 16px; }
 .bg-print-page .bg-side { width: 7.5in; max-width: none; min-height: 11.25in; box-sizing: border-box; padding: .3in; font-size: 11.5px; }
 @media print {
-  @page { size: 8.5in 14in; margin: .4in .5in; }
   body, .bg-print-page { background: #fff !important; padding: 0 !important; }
   .bg-print-page .bg-side { margin: 0 auto; break-after: page; page-break-after: always; border: 1pt solid #000; }
   .bg-side, .bg-side * { color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -473,3 +472,104 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .wbanner span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-top: 2px; }
 .wbanner.sm { padding: 5px 6px 4px; } .wbanner.sm strong { font-size: 15px; } .wbanner.sm span { font-size: 9.5px; }
 .wbanner[hidden] { display: none; }
+
+/* ---------- Photos page: arrange, minimum ---------- */
+.shoot-cam small { display: block; font-size: 12px; font-weight: 600; opacity: .85; }
+.shoot-cam { flex-direction: column; gap: 2px; }
+.shoot-two { display: flex; gap: 8px; margin-top: 8px; } .shoot-two > * { flex: 1; justify-content: center; margin: 0 !important; }
+.shoot-min { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 800; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 2px 9px; }
+.shoot-min.ok { color: var(--ok); background: var(--ok-bg); }
+.shoot-arrange { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.shoot-arrange li { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: start; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.shoot-arrange li:last-child { border-bottom: 0; }
+.shoot-arrange img { width: 120px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: #eceef1; }
+.shoot-arrange-top { font-size: 14px; }
+.shoot-caption { margin-top: 4px; min-height: 38px; font-size: 15px; }
+.shoot-caption.saved { border-color: var(--ok); }
+.shoot-arrange-btns { display: flex; gap: 6px; margin-top: 6px; }
+.shoot-arrange-btns button { min-width: 44px; min-height: 40px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font-size: 16px; cursor: pointer; }
+.shoot-arrange-btns button:disabled { opacity: .35; }
+.shoot-arrange-btns .del { margin-left: auto; color: var(--bad); }
+
+/* ---------- In-app series camera ---------- */
+body.cam-open { overflow: hidden; }
+.cam { position: fixed; inset: 0; z-index: 1000; background: #000; color: #fff; display: flex; flex-direction: column; }
+.cam-stage { position: relative; flex: 1; min-height: 0; }
+.cam-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.cam-frame { position: absolute; pointer-events: none; }
+.cam-grid { position: absolute; inset: 0; }
+.cam-grid i { position: absolute; background: rgba(255, 255, 255, .55); box-shadow: 0 0 1px rgba(0, 0, 0, .6); }
+.cam-grid i:nth-child(1) { left: 33.333%; top: 0; bottom: 0; width: 1px; } .cam-grid i:nth-child(2) { left: 66.666%; top: 0; bottom: 0; width: 1px; }
+.cam-grid i:nth-child(3) { top: 33.333%; left: 0; right: 0; height: 1px; } .cam-grid i:nth-child(4) { top: 66.666%; left: 0; right: 0; height: 1px; }
+.cam.no-grid .cam-grid { display: none; }
+.cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.cam.flash .cam-flash { opacity: .7; transition: none; }
+.cam-msg { position: absolute; left: 16px; right: 16px; top: 45%; text-align: center; font-weight: 600; }
+.cam-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 14px 10px; background: linear-gradient(rgba(0, 0, 0, .65), transparent); font-size: 14px; }
+.cam-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cam-count { font-weight: 800; }
+.cam-last { width: 48px; height: 36px; object-fit: cover; border-radius: 4px; border: 2px solid #fff; }
+.cam-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px max(14px, env(safe-area-inset-bottom)); background: #000; }
+.cam-shutter { width: 74px; height: 74px; border-radius: 50%; border: 5px solid #fff; background: #fff; box-shadow: inset 0 0 0 3px #000; cursor: pointer; }
+.cam-shutter:active { transform: scale(.94); } .cam-shutter:disabled { opacity: .4; }
+.cam-done, .cam-grid-toggle { min-width: 64px; min-height: 44px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, .5); background: transparent; color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; }
+.cam-grid-toggle[aria-pressed="true"] { background: rgba(255, 255, 255, .2); }
+@media (orientation: landscape) and (max-height: 520px) {
+  .cam { flex-direction: row; } .cam-bar { flex-direction: column-reverse; padding: 14px; justify-content: space-between; }
+}
+.audit { display: flex; gap: 14px; align-items: flex-start; }
+.audit-score { flex: none; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: baseline; justify-content: center; padding-top: 16px; font-weight: 900; }
+.audit-score b { font-size: 24px; } .audit-score span { font-size: 11px; }
+.audit-score.ok { background: var(--ok-bg); color: var(--ok); } .audit-score.mid { background: var(--warn-bg); color: var(--warn); } .audit-score.low { background: var(--bad-bg); color: var(--bad); }
+.audit-issues { margin: 4px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); }
+.photo-cap-input { border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 13px; min-height: 32px; padding: 4px 8px; }
+.photo-cap { font-size: 13px; padding: 4px 8px; background: #fff; }
+
+/* Sticker: full equipment lists */
+.ws-equip { padding: 0 0.3in 0.06in; }
+.ws-equip h2 { margin-top: 6px; }
+.ws-equip-note { font-size: 8pt; font-weight: 400; text-transform: none; letter-spacing: 0; color: #444; }
+.ws-equip-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 .16in; }
+.ws-equip-col h3 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 2px; color: var(--ws-ink); }
+.ws-equip-col ul { margin: 0; padding-left: 10px; font-size: 7.5pt; line-height: 1.25; }
+/* With equipment lists the upper part tightens so everything stays on one page */
+.ws-has-equip .ws-title h1 { font-size: 21pt; }
+.ws-has-equip .ws-big { font-size: 28pt; }
+.ws-has-equip .ws-qr svg { width: 1.15in; height: 1.15in; }
+.ws-has-equip .ws-body { flex: none; }
+.ws-has-equip h2 { margin: 10px 0 6px; }
+.ws-mode { display: inline-flex; } .ws-mode .btn { border-radius: 0; } .ws-mode .btn:first-child { border-radius: 8px 0 0 8px; } .ws-mode .btn:last-child { border-radius: 0 8px 8px 0; }
+.ws-mode [aria-pressed="true"] { background: var(--brand); color: #fff; }
+
+/* Sticker: black & white */
+.ws.ws-bw { --ws-brand: #000; --ws-accent: #000; }
+.ws-bw .ws-head { background: #fff; color: #000; border-bottom: 3px solid #000; }
+.ws-bw .ws-head img { padding: 0; }
+.ws-bw .ws-stack tr.discount td:last-child, .ws-bw .ws-stack tr.rebate td:last-child, .ws-bw .ws-save { color: #000; }
+.ws-bw .ws-hl li::before { background: #000; }
+.ws-bw .ws-warranty strong { color: #000; }
+.ws-bw img { filter: grayscale(1); }
+
+/* Buyers Guide printed on letter paper (8½" × 11", above the Rule's 7¼" × 11" minimum) */
+.bg-print-page .bg-side { width: 8in; min-height: 10.4in; padding: .3in .35in; font-size: 12.5px; }
+.bg-print-page .bg-title { font-size: 30px; }
+.bg-print-page .bg-big { font-size: 24px; }
+.bg-print-page .bg-defects { font-size: 11px; }
+@media print {
+  @page { size: letter portrait; margin: .25in; }
+}
+.ws-details { display: grid; grid-template-columns: 1fr 1.5fr; gap: 1px 18px; margin: 6px 0 0; font-size: 10.5pt; }
+.ws-details > div { display: flex; gap: 4px; min-width: 0; } .ws-details dt { font-weight: 700; flex: none; } .ws-details dd { margin: 0; overflow-wrap: anywhere; }
+.ws-web { font-size: 15pt; font-weight: 900; text-align: center; color: var(--ws-brand); margin: 0 0 4px; letter-spacing: .01em; }
+/* Admin photo banners (Settings → Photo banners): bottom of the first photo; the Lifetime Warranty banner keeps the top. */
+.pbanner { position: absolute; left: 0; right: 0; bottom: 0; background: var(--brand, #013C9E); color: #fff; text-align: center; padding: 7px 10px 8px; box-shadow: 0 -2px 8px rgba(0, 0, 0, .25); pointer-events: none; }
+.pbanner strong { display: block; font-size: clamp(16px, 4vw, 26px); font-weight: 900; letter-spacing: .05em; line-height: 1.05; text-transform: uppercase; }
+.pbanner span { display: block; font-size: 11px; font-weight: 700; margin-top: 2px; }
+.pbanner.sm { padding: 4px 6px 5px; } .pbanner.sm strong { font-size: 14px; } .pbanner.sm span { font-size: 9.5px; }
+.pbanner[hidden] { display: none; }
+.gallery-main .count { z-index: 2; } .gallery-main:has(.pbanner:not([hidden])) .count { bottom: auto; top: 10px; }
+.gallery-main:has(.wbanner:not([hidden])):has(.pbanner:not([hidden])) .count { top: auto; bottom: 64px; }
+.banner-rules { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+.banner-rules li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 8px 10px; }
+.banner-rules .pbanner { position: static; box-shadow: none; border-radius: 6px; min-width: 160px; flex: 0 1 260px; }
+.banner-rules .who { flex: 1 1 180px; min-width: 0; } .banner-rules li.off { opacity: .55; }

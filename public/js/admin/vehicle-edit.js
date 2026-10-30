@@ -10,6 +10,7 @@ import { renderBuyersGuide, resolveGuide, needsBuyersGuide, isShorthand } from '
 import { chomesTab, chomesBadge, loadChomes } from './chomes-tab.js';
 import { stickerTab, stickerBadge } from './sticker-tab.js';
 import { programStatus } from '../warranty-program.js';
+import { auditPhotos, DEFAULT_PHOTO_MIN } from '../photo-audit.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -208,7 +209,19 @@ export default async function vehicleEdit(el, { id }) {
   // ---------------------------------------------------------------- photos
   function photos(box) {
     const list = v.vehicle_photos;
-    mount(box, html`
+    const canEdit = ctx.isAdmin; // photographers use the Photos page; salespeople can look
+    const a = auditPhotos(v, list, ctx.dealership.photo_min || DEFAULT_PHOTO_MIN);
+    const audit = html`<div class="card audit"><div class="audit-score ${a.score >= 85 ? 'ok' : a.score >= 60 ? 'mid' : 'low'}"><b>${a.score}</b><span>/100</span></div>
+      <div><strong>Photo audit</strong> · ${a.count} of ${a.min} photos${a.meetsMinimum ? ' ✓' : ''} · ${a.captioned} captioned
+        ${a.issues.length ? html`<ul class="audit-issues">${a.issues.map((i) => html`<li>${i}</li>`)}</ul>` : html`<p class="small" style="margin:4px 0 0;color:var(--ok)">Meets the photo standard.</p>`}</div></div>`;
+    if (!canEdit) {
+      mount(box, html`${audit}<p class="notice">Only photographers and admins can add, reorder or delete photos.</p>
+        ${list.length ? html`<div class="photo-grid">${list.map((p, i) => html`<div class="photo-tile">${i === 0 ? html`<span class="cover">Cover</span>` : ''}
+          <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy">${p.caption ? html`<div class="photo-cap">${p.caption}</div>` : ''}</div>`)}</div>`
+          : html`<div class="card sub" style="text-align:center">No photos yet.</div>`}`);
+      return;
+    }
+    mount(box, html`${audit}
       <div class="dropzone" id="drop">
         <p style="margin:0 0 10px"><strong>Drag photos here</strong> or</p>
         <label class="btn" style="display:inline-flex;margin:0">Choose photos
@@ -222,6 +235,7 @@ export default async function vehicleEdit(el, { id }) {
       ${list.length ? html`<div class="photo-grid">${list.map((p, i) => html`<div class="photo-tile">
         ${i === 0 ? html`<span class="cover">Cover</span>` : ''}
         <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy">
+        <input class="photo-cap-input" data-cap="${p.id}" value="${p.caption || ''}" maxlength="200" placeholder="Caption" aria-label="Caption for photo ${i + 1}">
         <div class="bar">
           <span><button data-move="-1" data-id="${p.id}" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>◀</button><button data-move="1" data-id="${p.id}" aria-label="Move right" ${i === list.length - 1 ? 'disabled' : ''}>▶</button></span>
           <span>${i !== 0 ? html`<button data-cover="${p.id}" title="Make cover">★</button>` : ''}<button data-del="${p.id}" aria-label="Delete photo">🗑</button></span>
@@ -294,6 +308,14 @@ export default async function vehicleEdit(el, { id }) {
         v.vehicle_photos = list.filter((x) => x !== p);
         frame();
       } catch (err) { toast(errMsg(err), 'bad'); }
+    });
+    on(box, 'change', '[data-cap]', async (e, inp) => {
+      const caption = inp.value.trim() || null;
+      const { error } = await sb.from('vehicle_photos').update({ caption }).eq('id', inp.dataset.cap);
+      if (error) { toast(errMsg(error), 'bad'); return; }
+      const p = list.find((x) => x.id === inp.dataset.cap);
+      if (p) p.caption = caption;
+      toast('Caption saved');
     });
     const delAll = $('#del-all', box);
     delAll && delAll.addEventListener('click', async () => {

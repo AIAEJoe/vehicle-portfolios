@@ -2,6 +2,7 @@ import { sb, html, mount, must, money, miles, vTitle, timeAgo, $, errMsg } from 
 import { adminPage, STATUS_LABEL } from './layout.js';
 import { resolveGuide, needsBuyersGuide } from '../buyers-guide.js';
 import { programStatus } from '../warranty-program.js';
+import { DEFAULT_PHOTO_MIN } from '../photo-audit.js';
 
 export default async function vehicles(el) {
   const page = await adminPage(el, 'vehicles');
@@ -60,6 +61,7 @@ export default async function vehicles(el) {
             <div class="meta"><span class="pill ${v.status}">${STATUS_LABEL[v.status]}</span>
               ${v.stock_number ? ` Stock ${v.stock_number}` : ''}${v.price ? ` · ${money(v.price)}` : ''}${v.mileage != null ? ` · ${miles(v.mileage)} mi` : ''}
               ${v.salesperson ? ` · ${v.salesperson.full_name}` : ''}${v.source === 'feed' ? ' · feed' : ''}
+              ${(v.vehicle_photos || []).length < (ctx.dealership.photo_min || DEFAULT_PHOTO_MIN) ? html` <span class="pill contacted" title="Below the photo standard in Settings">${(v.vehicle_photos || []).length}/${ctx.dealership.photo_min || DEFAULT_PHOTO_MIN} photos</span>` : ''}
               ${needsBuyersGuide(v) && programStatus(v, ctx.dealership.bg_program) === 'missing'
                 ? html` <span class="pill sold" title="The description mentions the ${ctx.dealership.bg_program.name}, but the Buyers Guide doesn't include it.">Warranty missing from Buyers Guide</span>`
                 : needsBuyersGuide(v) && resolveGuide(v, ctx.dealership).pending ? html` <span class="pill contacted" title="No warranty terms entered. Customers see the As Is Buyers Guide.">Warranty data pending</span>` : ''}</div>

@@ -60,7 +60,7 @@ export async function adminPage(el, active, { adminOnly = false, photographer = 
       <a class="brand" href="/admin">Vehicle Portfolios <small>${config.dealer}</small></a>
       <nav>${ctx.isPhotographer ? link('/admin/shoot', 'Photos', 'shoot') : html`
         ${link('/admin/vehicles', 'Vehicles', 'vehicles')}
-        ${link('/admin/shoot', 'Photos', 'shoot')}
+        ${ctx.isAdmin ? link('/admin/shoot', 'Photos', 'shoot') : ''}
         <a href="/admin/inbox" class="${active === 'inbox' ? 'on' : ''}">Inbox<span id="unread-badge"></span></a>
         ${link('/admin/leads', 'Leads', 'leads')}
         ${link('/admin/staff', 'Staff', 'staff')}
