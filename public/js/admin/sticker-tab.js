@@ -57,7 +57,7 @@ export function stickerTab(box, { v, chomes, ctx, onChange }) {
       <h2>Original factory window sticker</h2>
       ${factory ? html`<div class="doc-row"><span><strong>${factory.title}</strong><br><span class="small sub">From the ${factory.source === 'oem' ? 'manufacturer' : 'sticker service'} · shown to customers on the Documents list</span></span>
           <span class="btn-row"><a class="btn ghost sm" href="${factory.url}" target="_blank" data-external>Open</a></span></div>`
-        : html`<p class="sub" style="margin-top:0">${otherSticker ? `"${otherSticker.title}" is already on the Documents tab. ` : ''}Find the original sticker by VIN. GM, Ford, Lincoln and Stellantis (Jeep, Ram, Dodge, Chrysler) publish them; most other brands don't.</p>`}
+        : html`<p class="sub" style="margin-top:0">${otherSticker ? `"${otherSticker.title}" is already on the Documents tab. ` : ''}Find the original sticker by VIN for Ford, Lincoln and Stellantis (Jeep, Ram, Dodge, Chrysler). For GM vehicles, download it from GlobalConnect and upload it on the Documents tab.</p>`}
       <div class="btn-row"><button type="button" class="btn ${factory ? 'alt' : ''}" id="st-find" ${v.vin ? '' : 'disabled'}>${factory ? 'Fetch again' : 'Find factory sticker'}</button>
         ${used && factory ? html`<button type="button" class="btn alt" data-goto="chomes">Pull option packages into CHOMES</button>` : ''}</div>
       ${v.vin ? '' : html`<p class="notice warn">Add the VIN on the Details tab first.</p>`}

@@ -136,6 +136,22 @@ Per-dealership plan options:
 
 ---
 
+## Window stickers
+
+**Dealer window sticker** (`/admin/vehicles/<id>/sticker`, US Letter portrait; print at 100%). Built only from customer-safe data:
+- **Price**, or a **pricing stack**: starting price (MSRP / Retail price), then discounts, rebates and add-ons, then your price. The database requires every rebate to say who qualifies. The stack prints **only while it adds up to the vehicle's current price**. If the price changes (say, the hourly feed), the stack stops printing and the tab shows a "!" until someone updates it, so a stale stack never reaches the window. The fees note and the dealership's sticker small print (Settings → Window stickers) print at the bottom. Keep running totals like "Final price: $X" out of fees notes; they go stale when the price changes.
+- **Highlights** and **options/packages** from CHOMES (falling back to the feed's features).
+- **Vehicle story** from CHOMES: age, miles per year vs. average, and owners/accidents/service/title with the report named. It prints only while no FTC consistency review is pending. History lines need a report provider. Recon cost, notes and the demand note are never read.
+- A **QR code** to the vehicle page, tracked like the QR window card.
+- Used/CPO: "Warranty: see the FTC Buyers Guide displayed on this vehicle". The sticker never states warranty terms. New: it's labelled a dealer sticker, and the Monroney label stays on the car.
+
+**Original factory sticker** (Window sticker tab → *Find factory sticker*, `POST /api/window-sticker`). Fetches the manufacturer's own PDF by VIN, stores it in the media bucket and adds it to the vehicle's documents (`source = 'oem'`), replacing only an earlier fetched copy. Only real PDFs are accepted.
+- Ford/Lincoln: `windowsticker.forddirect.com`. Stellantis (Jeep, Ram, Dodge, Chrysler, Fiat, Alfa Romeo): the brand site's `/hostd/windowsticker/`. Usually about 2012 and newer. These aren't documented APIs and can change; the URLs are in `functions/_lib/window-sticker.js`.
+- **GM:** `cws.gm.com` stopped returning stickers in Oct 2026 (GM moved them behind its owner and dealer logins). The lookup still tries it, then tells staff to download the sticker from **GM GlobalConnect** and upload it on the Documents tab (type "Window sticker").
+- Other brands (Toyota, Honda, Kia…) don't publish stickers: upload them on the Documents tab. `VINAUDIT_API_KEY` enables VinAudit's window sticker API as a fallback (`source = 'provider'`), but as of Oct 2026 that API is still "coming soon". iSeeCars (developer preview, original PDFs) is the other candidate to plug in.
+
+**Option packages into CHOMES.** On the CHOMES tab, *Read options from the factory sticker* opens any window sticker PDF on the vehicle (fetched or uploaded) in the browser with pdf.js, reads the optional-equipment section and lists what it found. Staff tick what to add, then save.
+
 ## Deploy
 
 ### 1. Supabase

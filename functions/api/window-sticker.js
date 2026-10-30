@@ -25,7 +25,12 @@ export const onRequestPost = handle(async ({ request, env }) => {
     if (r.ok) { got = { src, bytes: r.bytes }; break; }
     misses.push(r.message);
   }
-  if (!got) throw new HttpError(404, `${misses.join('. ')}. Older vehicles (and some built in the last few weeks) often have none online.`);
+  if (!got) {
+    const gm = sources[0] && sources[0].brand === 'GM';
+    throw new HttpError(404, gm
+      ? `GM no longer shares window stickers publicly by VIN. Download it from GM GlobalConnect and upload it on the Documents tab (type "Window sticker").`
+      : `${misses.join('. ')}. Older vehicles (and some built in the last few weeks) often have none online. You can upload the sticker on the Documents tab.`);
+  }
 
   requireEnv(env, 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY');
   const base = env.SUPABASE_URL.replace(/\/$/, '');
