@@ -25,7 +25,7 @@ export function chomesBadge(v, rec) {
  * @param box   element to draw into
  * @param opts  { v, rec, ctx, staff, onChange(rec, vehiclePatch) }
  */
-export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
+export function chomesTab(box, { v, rec, ctx, staff, factory, onChange }) {
   if (v.condition === 'new') {
     mount(box, html`<div class="card"><h2>CHOMES vehicle story</h2><p class="sub">Only used and certified pre-owned vehicles get a CHOMES story. This vehicle is listed as new.</p></div>`);
     return;
@@ -157,7 +157,10 @@ export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
             <div class="hint">From the window sticker.</div></div>
           <div>${label('highlight_features', 'Highlight features (one per line, 3 to 5)')}
             <textarea id="ch-highlight_features" name="highlight_features" rows="5" placeholder="Heated seats&#10;Remote start&#10;Apple CarPlay">${(rec.highlight_features || []).join('\n')}</textarea>${src('highlight_features')}
-            <div class="hint" id="ch-hl-count">The ones the salesperson would actually mention.</div></div>
+            <div class="hint" id="ch-hl-count">The ones the salesperson would actually mention.</div>
+            ${factory && factory.data && (factory.data.features || []).length ? html`<details class="ch-pick"><summary>Pick from the ${factory.data.features.reduce((a, g) => a + g.items.length, 0)} factory standard features</summary>
+              ${factory.data.features.map((g) => html`<div class="ch-pick-group"><span class="small sub">${g.group}</span><div>${g.items.map((it) => html`<button type="button" class="chip-btn" data-hl="${it}">${it}</button>`)}</div></div>`)}
+              <p class="hint">From VinAudit's VIN data for this trim. Pick what a buyer would care about.</p></details>` : ''}</div>
         </div>
       </section>
 
@@ -188,6 +191,23 @@ export function chomesTab(box, { v, rec, ctx, staff, onChange }) {
     hint.style.color = n > 5 ? 'var(--bad)' : '';
   };
   form.addEventListener('input', (e) => { if (e.target.name === 'highlight_features') hlCount(); });
+  on(box, 'click', '[data-hl]', (e, b) => {
+    const cur = form.highlight_features.value.split('\n').map((x) => x.trim()).filter(Boolean);
+    const name = b.dataset.hl;
+    const i = cur.findIndex((x) => x.toLowerCase() === name.toLowerCase());
+    if (i >= 0) cur.splice(i, 1);
+    else if (cur.length >= 5) { toast('Five highlights is the limit. Remove one first.', 'bad'); return; }
+    else cur.push(name);
+    form.highlight_features.value = cur.join('\n');
+    syncPicks();
+    hlCount();
+  });
+  const syncPicks = () => {
+    const cur = new Set(form.highlight_features.value.split('\n').map((x) => x.trim().toLowerCase()).filter(Boolean));
+    box.querySelectorAll('[data-hl]').forEach((b) => b.classList.toggle('on', cur.has(b.dataset.hl.toLowerCase())));
+  };
+  syncPicks();
+  form.addEventListener('input', (e) => { if (e.target.name === 'highlight_features') syncPicks(); });
   form.addEventListener('change', (e) => {
     if (e.target.name === 'title_issues') $('#ch-title-detail', box).hidden = e.target.value !== 'true';
   });

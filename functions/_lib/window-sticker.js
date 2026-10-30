@@ -23,7 +23,9 @@ export function oemSource(vin, make) {
 }
 
 export function providerSource(vin, env) {
-  if (!env.VINAUDIT_API_KEY) return null;
+  // VinAudit's window sticker API is a separate product ("coming soon" as of Oct 2026); the same key also serves
+  // the VIN decoder, so only call it once it's switched on.
+  if (!env.VINAUDIT_API_KEY || !env.VINAUDIT_WINDOW_STICKERS) return null;
   return { brand: 'VinAudit', url: `https://windowstickers.vinaudit.com/v1/windowsticker?vin=${encodeURIComponent(vin)}&key=${encodeURIComponent(env.VINAUDIT_API_KEY)}&format=pdf+json`, provider: true };
 }
 

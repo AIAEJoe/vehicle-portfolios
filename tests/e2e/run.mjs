@@ -50,6 +50,9 @@ const FACTORY_PDF = await (async () => {
   t('FUEL ECONOMY AND ENVIRONMENT', 40, 520, 11);
   return Buffer.from(await doc.save());
 })();
+const { normalizeSpecs } = await import('../../functions/_lib/vinaudit.js');
+const TRAX_VIN = 'KL77LKEP3SC259877';
+const TRAX_DATA = normalizeSpecs(JSON.parse(readFileSync(join(ROOT, 'tests/functions/fixtures/vinaudit-trax-2025.json'), 'utf8')));
 const PDFJS_DIR = join(execSync('npm root -g').toString().trim(), 'pdfjs-dist/build');
 
 // ---- seed data (mirrors supabase/seed.sql) ----
@@ -96,6 +99,7 @@ const SEED = {
     recalls: null, created_at: '2026-10-14T12:00:00Z', updated_at: '2026-10-14T12:00:00Z' }],
   vehicle_photos: Array.from({ length: 32 }, (_, i) => ({ id: `p${i}`, vehicle_id: V, dealership_id: D, url: `/seed/jeep-${String(i + 1).padStart(2, '0')}.jpg`, position: i, source: 'url', created_at: '2026-10-14T12:00:00Z' })),
   vehicle_documents: [],
+  vehicle_factory_data: [],
   vehicle_chomes: [{ vehicle_id: V, dealership_id: D, options_packages: [], highlight_features: [], review_required: false, created_at: '2026-10-23T12:00:00Z', updated_at: '2026-10-23T12:00:00Z',
     provenance: Object.fromEntries(['model_year', 'odometer', 'trim', 'drivetrain', 'engine'].map((k) => [k, { source: 'existing_record', by: null, by_name: null, at: '2026-10-14T12:00:00Z' }])) }],
   shares: [{ id: 'sh1', code: 'MikeCode', vehicle_id: V, dealership_id: D, staff_id: S, customer_name: 'Mike Smith', customer_phone: '386-555-0100', channel: 'sms', open_count: 2, last_opened_at: new Date(Date.now() - 300000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }],
@@ -191,6 +195,13 @@ async function setup(context) {
       assert(route.request().headers().authorization, 'sticker lookup sends auth');
       if (b.vehicle_id !== V) return json(route, { error: "Toyota doesn't publish original window stickers online." }, 422);
       return json(route, { ok: true, from: 'GM', document: { id: 'fws', vehicle_id: V, dealership_id: D, kind: 'window_sticker', source: 'oem', title: 'Original factory window sticker', url: `${ORIGIN}/test/factory-sticker.pdf?v=1`, storage_path: 'x' } });
+    }
+    if (p === '/api/vehicle-specs') {
+      const b = route.request().postDataJSON();
+      (api.specs ||= []).push(b);
+      assert(route.request().headers().authorization, 'factory lookup sends auth');
+      return json(route, { ok: true, cached: false, factory: { vehicle_id: b.vehicle_id, vin: TRAX_VIN, source: 'vinaudit', data: TRAX_DATA, fetched_at: TRAX_DATA.fetched_at },
+        vehicle: { id: b.vehicle_id, engine: '1.2L I3', transmission: '6-Speed Automatic', drivetrain: 'Front-Wheel Drive', fuel_type: 'Gasoline', mpg_city: 28, mpg_hwy: 32 } });
     }
     if (p === '/test/factory-sticker.pdf') return route.fulfill({ contentType: 'application/pdf', body: FACTORY_PDF, headers: { 'access-control-allow-origin': '*' } });
     if (p.startsWith('/api/')) return json(route, { error: 'not mocked' }, 404);
@@ -664,6 +675,78 @@ console.log('Dashboard');
     const t = await page.textContent('.ws');
     assert(t.includes('$18,995') && !t.includes('Dealer discount') && !t.includes('You save'), 'stale stack hidden');
     assert((await page.textContent('main')).includes("The pricing stack isn't printed"), 'staff told why');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
+    await page.waitForSelector('#details');
+  });
+  await step('factory data: VIN decoder lookup fills basics, shows trim caveat, conflicts and staff-only pricing', async () => {
+    const T = '9d2c1f1e-0000-4000-8000-0000000000f7';
+    await page.evaluate(({ T, D, TRAX_VIN }) => {
+      window.__DB.vehicles.push({ id: T, dealership_id: D, slug: '2025-chevrolet-trax-activ', status: 'published', condition: 'used', vin: TRAX_VIN, year: 2025, make: 'Chevrolet',
+        model: 'Trax', trim: 'ACTIV', engine: null, mileage: 9120, price: 21995, features: [], specs: {}, price_stack: [], source: 'manual', created_at: '2026-10-29T12:00:00Z' });
+      window.__DB.vehicle_chomes.push({ vehicle_id: T, dealership_id: D, options_packages: [], highlight_features: [], provenance: {}, review_required: false });
+      window.__SAVE();
+    }, { T, D, TRAX_VIN });
+    await page.goto(`${ORIGIN}/admin/vehicles/${T}#sticker`);
+    await page.waitForSelector('#fdata [data-specs=get]');
+    await page.click('#fdata [data-specs=get]');
+    await page.waitForSelector('#toast >> text=Factory data saved');
+    await page.waitForSelector('.fd-facts');
+    const t = await page.textContent('#fdata');
+    for (const x of ['1.2L I3', '28 city / 32 highway MPG', 'Changwon, Korea', '29 features', 'Equipment is what this trim comes with', 'dimensions disagree', "Don't advertise these without checking"])
+      assert(t.includes(x), x);
+    assert(!(await page.isVisible('.fd-price table')), 'pricing collapsed by default');
+    assert(api.specs.at(-1).refresh === false && api.specs.at(-1).vehicle_id === T, JSON.stringify(api.specs.at(-1)));
+    await page.click('#fdata [data-specs=refresh]');
+    await page.waitForFunction(() => true);
+    await page.waitForSelector('#toast >> text=Factory data saved');
+    assert(api.specs.at(-1).refresh === true, 'look up again asks for a refresh');
+    // the server wrote the row; mirror it into the stub database
+    await page.evaluate(({ T, TRAX_VIN, data }) => { window.__DB.vehicle_factory_data = [{ vehicle_id: T, vin: TRAX_VIN, source: 'vinaudit', data, fetched_at: data.fetched_at }];
+      Object.assign(window.__DB.vehicles.find((v) => v.id === T), { engine: '1.2L I3', mpg_city: 28, mpg_hwy: 32 }); window.__SAVE(); }, { T, TRAX_VIN, data: TRAX_DATA });
+  });
+  await step('factory data: pick CHOMES highlights from standard equipment (max five, toggles)', async () => {
+    const T = '9d2c1f1e-0000-4000-8000-0000000000f7';
+    await page.goto(`${ORIGIN}/admin/vehicles/${T}#chomes`);
+    await page.waitForSelector('.ch-pick');
+    await page.click('.ch-pick summary');
+    for (const f of ['Heated Steering Wheel', 'Remote Ignition', 'Front Heated Seat', 'Keyless Entry', 'Cruise Control']) await page.click(`[data-hl="${f}"]`);
+    await page.click('[data-hl="Power Windows"]');
+    await page.waitForSelector('#toast >> text=Five highlights is the limit');
+    await page.click('[data-hl="Keyless Entry"]');
+    assert((await page.inputValue('#ch-highlight_features')) === 'Heated Steering Wheel\nRemote Ignition\nFront Heated Seat\nCruise Control', await page.inputValue('#ch-highlight_features'));
+    assert((await page.$$('.chip-btn.on')).length === 4, 'chips reflect the list');
+    await page.click('#chomes button[type=submit]');
+    await page.waitForSelector('#toast >> text=Saved');
+    assert((await db()).vehicle_chomes.find((c) => c.vehicle_id === T).highlight_features.length === 4, 'saved');
+  });
+  await step('factory equipment sheet: trim caveat, specs, equipment; no prices or dimensions', async () => {
+    const T = '9d2c1f1e-0000-4000-8000-0000000000f7';
+    await page.goto(`${ORIGIN}/admin/vehicles/${T}/factory-sheet`);
+    await page.waitForSelector('.fs');
+    const t = await page.textContent('.fs');
+    for (const x of ['Factory equipment', '2025 Chevrolet Trax ACTIV', 'VIN KL77LKEP3SC259877', 'options and packages added to this particular vehicle are not included',
+      'This is not the manufacturer\'s window sticker', '28 city / 32 hwy MPG', 'Changwon, Korea', 'Heated Steering Wheel', 'Remote Ignition', 'Tires: 225/55R18', 'Front Suspension: Independent', 'VinAudit'])
+      assert(t.includes(x), x);
+    for (const bad of ['$', '22,500', '24,985', 'Invoice', 'MSRP', '178.6', '168.5', 'Headroom', 'Legroom']) assert(!t.includes(bad), 'should not print: ' + bad);
+    assert((t.match(/Front Side Airbag With Head Protection/g) || []).length === 1, 'no duplicates');
+    await page.emulateMedia({ media: 'print' });
+    const box = await page.$eval('.fs', (e) => e.getBoundingClientRect());
+    assert(box.height <= 10.35 * 96 && !(await page.isVisible('.admin-top')), `fits one letter page: ${box.height}`);
+    await page.emulateMedia({ media: 'screen' });
+  });
+  await page.setViewportSize({ width: 900, height: 1200 });
+  await page.screenshot({ path: join(SHOTS, '05g-factory-sheet.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await step('dealer sticker uses the picked highlights and decoded MPG', async () => {
+    const T = '9d2c1f1e-0000-4000-8000-0000000000f7';
+    await page.goto(`${ORIGIN}/admin/vehicles/${T}/sticker`);
+    await page.waitForSelector('.ws');
+    const t = await page.textContent('.ws');
+    for (const x of ['Heated Steering Wheel', 'Remote Ignition', '28 city / 32 hwy', '1.2L I3']) assert(t.includes(x), x);
+    assert(!t.includes('22,500') && !t.includes('Invoice'), 'no factory pricing on the sticker');
+    await page.evaluate((T) => { for (const k of ['vehicles']) window.__DB[k] = window.__DB[k].filter((x) => x.id !== T);
+      window.__DB.vehicle_chomes = window.__DB.vehicle_chomes.filter((x) => x.vehicle_id !== T); window.__DB.shares = window.__DB.shares.filter((x) => x.vehicle_id !== T);
+      window.__DB.vehicle_factory_data = []; window.__SAVE(); }, T);
     await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
     await page.waitForSelector('#details');
   });

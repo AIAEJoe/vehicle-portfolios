@@ -404,3 +404,29 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .ws { border: 0; margin: 0; width: 7.8in; min-height: 10.25in; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media screen and (max-width: 8.4in) { .ws { zoom: .46; } }
+
+/* ---------- Factory data (VIN decoder) ---------- */
+.fd-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 8px 0 10px; }
+.fd-facts dt { font-weight: 700; color: var(--muted); } .fd-facts dd { margin: 0; }
+.fd-price summary { cursor: pointer; font-weight: 700; margin: 8px 0; }
+.fd-price table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.ch-pick { margin-top: 8px; } .ch-pick summary { cursor: pointer; font-weight: 600; color: var(--brand); font-size: 14px; }
+.ch-pick-group { margin-top: 8px; } .ch-pick-group > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.chip-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+.chip-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* ---------- Printed factory equipment sheet (US Letter) ---------- */
+.fs { width: 7.8in; margin: 0 auto 24px; background: #fff; color: #111; border: 1px solid var(--line); padding: 0.3in; font-size: 10.5pt; line-height: 1.35; }
+.fs-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 3px solid #111; padding-bottom: 10px; }
+.fs-head img { height: 0.5in; max-width: 2.6in; object-fit: contain; }
+.fs-kicker { font-size: 9.5pt; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.fs h1 { font-size: 20pt; margin: 2px 0; color: #111; }
+.fs-note { font-size: 8.5pt; color: #333; margin: 8px 0 12px; }
+.fs-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 14px; }
+.fs-facts div { border: 1px solid #ccc; border-radius: 6px; padding: 6px 8px; } .fs-facts b { display: block; font-size: 8pt; text-transform: uppercase; letter-spacing: .05em; color: #444; }
+.fs-groups { columns: 2; column-gap: 0.3in; }
+.fs-group { break-inside: avoid; margin-bottom: 10px; } .fs-group h2 { font-size: 9.5pt; text-transform: uppercase; letter-spacing: .05em; border: 0; border-bottom: 1px solid #111; padding: 0 0 2px; margin: 0 0 4px; }
+.fs-group ul { margin: 0; padding-left: 16px; }
+.fs-foot { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 6px; font-size: 8pt; color: #333; }
+@media print { .fs { border: 0; margin: 0; padding: 0; } }
+@media screen and (max-width: 8.4in) { .fs { zoom: .46; } }

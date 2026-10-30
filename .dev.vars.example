@@ -31,5 +31,7 @@ SFTPTOGO_SECRET_ACCESS_KEY=...
 SFTPTOGO_BUCKET=...
 # SFTPTOGO_REGION=us-east-1
 
-# Optional: VinAudit window sticker API, used for brands whose manufacturers don't publish stickers by VIN
-# VINAUDIT_API_KEY=
+# VinAudit: VIN decoder (factory data, factory equipment sheet). One query (~$0.10) per VIN, cached.
+VINAUDIT_API_KEY=
+# Set to 1 only once VinAudit's separate window sticker API is enabled on the same key ("coming soon" as of Oct 2026)
+# VINAUDIT_WINDOW_STICKERS=1

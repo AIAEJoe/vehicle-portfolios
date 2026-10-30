@@ -93,7 +93,8 @@ test('which manufacturers publish stickers', () => {
   assert.equal(oemSource('1GKS2DKL0RR000001', null).brand, 'GM', 'falls back to the VIN when the make is missing');
   assert.equal(oemSource('JTDKB20U793000001', 'Toyota'), null);
   assert.equal(providerSource('JTDKB20U793000001', {}), null);
-  assert.match(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k&y' }).url, /key=k%26y/);
+  assert.equal(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k' }), null, 'decoder key alone does not call the sticker API');
+  assert.match(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k&y', VINAUDIT_WINDOW_STICKERS: '1' }).url, /key=k%26y/);
 });
 
 // ---------- the lookup function ----------
@@ -109,7 +110,8 @@ beforeEach(() => {
     platform_admins: [],
     vehicles: [{ id: V, dealership_id: D, vin: '1GCUYDED5RZ100001', make: 'Chevrolet', year: 2024 },
       { id: '33333333-0000-4000-8000-000000000002', dealership_id: D, vin: 'JTDKB20U793000001', make: 'Toyota' },
-      { id: '33333333-0000-4000-8000-000000000003', dealership_id: 'd2', vin: '1GCUYDED5RZ100003', make: 'Chevrolet' }],
+      { id: '33333333-0000-4000-8000-000000000003', dealership_id: 'd2', vin: '1GCUYDED5RZ100003', make: 'Chevrolet' },
+      { id: '33333333-0000-4000-8000-000000000004', dealership_id: D, vin: '1FTFW1E50PFA00001', make: 'Ford' }],
     vehicle_documents: [{ id: 'old', vehicle_id: V, kind: 'window_sticker', source: 'oem', title: 'Original factory window sticker', url: 'x' },
       { id: 'mine', vehicle_id: V, kind: 'window_sticker', source: 'upload', title: 'Dealer upload', url: 'y' }],
   }, { users: { 'jwt-1': { id: 'u1', email: 's@nsb.test' } } });
@@ -119,7 +121,7 @@ beforeEach(() => {
     const u = new URL(String(url));
     if (u.host === 'proj.supabase.co' && u.pathname.startsWith('/storage/')) { uploads.push({ path: u.pathname, opts }); return new Response('{"Key":"x"}', { status: 200 }); }
     if (u.host === 'proj.supabase.co') return fake.handler(String(url), opts);
-    if (u.host === 'cws.gm.com') return oem(u);
+    if (u.host === 'cws.gm.com' || u.host === 'www.windowsticker.forddirect.com') return oem(u);
     return new Response('nope', { status: 404 });
   };
 });
@@ -145,13 +147,16 @@ test('lookup: refuses things that are not a real PDF', async () => {
   oem = () => new Response('<html>Sticker not found</html>', { status: 200, headers: { 'content-type': 'text/html' } });
   let res = await call({ vehicle_id: V });
   assert.equal(res.status, 404);
-  assert.match((await res.json()).error, /GM has no sticker on file/);
+  assert.match((await res.json()).error, /GlobalConnect/);
   oem = () => new Response(new TextEncoder().encode('%PDF-1.4\n%%EOF'), { status: 200 });
   res = await call({ vehicle_id: V });
-  assert.match((await res.json()).error, /empty sticker/);
+  assert.match((await res.json()).error, /GlobalConnect/, 'GM always points staff to GlobalConnect');
+  const FORD = '33333333-0000-4000-8000-000000000004';
+  res = await call({ vehicle_id: FORD });
+  assert.match((await res.json()).error, /Ford returned an empty sticker.*upload the sticker on the Documents tab/);
   oem = () => new Response('', { status: 500 });
-  res = await call({ vehicle_id: V });
-  assert.match((await res.json()).error, /\(500\)/);
+  res = await call({ vehicle_id: FORD });
+  assert.match((await res.json()).error, /Ford has no sticker for this VIN \(500\)/);
   assert.equal(uploads.length, 0);
   assert.ok(fake.db.vehicle_documents.some((d) => d.id === 'old'), 'nothing deleted on failure');
 });
