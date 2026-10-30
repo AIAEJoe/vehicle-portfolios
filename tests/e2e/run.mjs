@@ -62,19 +62,21 @@ const V = '9d2c1f1e-0000-4000-8000-0000000000bb';
 const OWNER = '9d2c1f1e-0000-4000-8000-0000000000cc';
 const OP = '9d2c1f1e-0000-4000-8000-0000000000dd';
 const SALES = '9d2c1f1e-0000-4000-8000-0000000000ee';
+const PHOTO = '9d2c1f1e-0000-4000-8000-0000000000f0';
 const CUST = '9d2c1f1e-0000-4000-8000-0000000000c1';
 const NOW = Date.now();
 const CV = '1G1YY23P6P5100917';
 const SEED = {
   users: [{ id: OWNER, email: 'owner@nsb.test', password: 'correct-horse' }, { id: OP, email: 'op@aiautoengine.test', password: 'operator-pass' },
-    { id: SALES, email: 'sales@nsb.test', password: 'sales-pass' }],
+    { id: SALES, email: 'sales@nsb.test', password: 'sales-pass' }, { id: PHOTO, email: 'photo@lotpics.test', password: 'photo-pass' }],
   platform_admins: [{ user_id: OP, created_at: '2026-01-01T00:00:00Z' }],
   dealerships: [{ id: D, slug: 'nsbchevy', name: 'New Smyrna Beach Chevrolet', phone: '(386) 427-1313', sms_phone: '(386) 427-1313',
     website: 'https://www.newsmyrnachevy.com', address_line: '2375 State Road 44', city: 'New Smyrna Beach', state: 'FL', zip: '32168',
     hours: 'Mon to Sat 9am to 8pm, Sun 11am to 6pm', logo_url: '/seed/nsb-logo.png', brand_primary: '#013C9E', brand_accent: '#F4BC00',
     default_fees_note: 'Plus $399 computerized vehicle registration fee and $998 documentation fee.' }],
   dealership_settings: [{ dealership_id: D, notify_on_open: true, open_alert_cooldown_minutes: 60, feed_auto_publish: true, feed_mark_missing_sold: true, feed_ingest_token: 'tok123', lead_email: null, crm_adf_email: null }],
-  dealership_members: [{ dealership_id: D, user_id: OWNER, role: 'owner', created_at: '2026-10-01T00:00:00Z' }, { dealership_id: D, user_id: SALES, role: 'sales', created_at: '2026-10-02T00:00:00Z' }],
+  dealership_members: [{ dealership_id: D, user_id: OWNER, role: 'owner', created_at: '2026-10-01T00:00:00Z' }, { dealership_id: D, user_id: SALES, role: 'sales', created_at: '2026-10-02T00:00:00Z' },
+    { dealership_id: D, user_id: PHOTO, role: 'photographer', created_at: '2026-10-30T00:00:00Z' }],
   dealership_billing: [{ dealership_id: D, plan_name: 'Vehicle Portfolios', monthly_fee: 995, included_sms_segments: 2500, included_emails: 5000, overage_sms_rate: 0.04, overage_email_rate: 0.005, pass_through_fixed_fees: false, allow_overage: true, status: 'active', billing_email: null, notes: null }],
   platform_settings: [{ id: 1, sms_out_segment_cost: 0.0083, sms_in_segment_cost: 0.0083, sms_carrier_fee_out: 0.0045, sms_carrier_fee_in: 0.003, mms_out_cost: 0.022, phone_number_monthly: 1.15, campaign_monthly: 10, brand_registration_fee: 46, campaign_vetting_fee: 15, email_cost: 0.0004, default_monthly_fee: 995, default_included_sms_segments: 2500, default_included_emails: 5000, default_overage_sms_rate: 0.04, default_overage_email_rate: 0.005 }],
   messaging_profiles: [{ dealership_id: D, twilio_subaccount_sid: 'ACsub', twilio_messaging_service_sid: 'MGnsb', twilio_phone_number: '+13865550000', sms_enabled: true, a2p_status: 'approved', a2p_step: 'done', a2p_log: [],
@@ -1234,6 +1236,89 @@ console.log('Platform console');
   });
   const stubErrors = await page.evaluate(() => window.__STUB_ERRORS);
   await step('no schema/stub errors (platform)', async () => assert(!stubErrors.length, stubErrors.join('; ')));
+  await context.close();
+}
+
+// ================= photographer (phone) =================
+console.log('Photographer');
+{
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148' });
+  await setup(context);
+  const page = await context.newPage();
+  watch(page);
+  const db = () => page.evaluate(() => window.__DB);
+  const jpg = (n) => ({ name: `IMG_00${n}.jpg`, mimeType: 'image/jpeg', buffer: readFileSync(join(PUB, `seed/jeep-0${n}.jpg`)) });
+  const TRAX = '9d2c1f1e-0000-4000-8000-0000000000f9';
+  await step('photographer signs in and only gets the Photos page', async () => {
+    await page.goto(`${ORIGIN}/admin/login`);
+    await page.fill('#email', 'photo@lotpics.test'); await page.fill('#password', 'photo-pass');
+    await page.click('#pw button');
+    await page.waitForSelector('#stock');
+    assert(new URL(page.url()).pathname === '/admin/shoot', page.url());
+    const nav = (await page.textContent('.admin-top nav')).replace(/\s+/g, ' ').trim();
+    assert(nav === 'Photos', nav);
+    for (const p of ['/admin/vehicles', '/admin/leads', '/admin/settings', `/admin/vehicles/${V}`]) {
+      await page.goto(`${ORIGIN}${p}`);
+      await page.waitForSelector('#stock');
+      assert(new URL(page.url()).pathname === '/admin/shoot', `${p} → ${page.url()}`);
+    }
+  });
+  await step('find a car by stock number (any case, with #) or the last 6 of the VIN', async () => {
+    await page.fill('#stock', 'zz999');
+    await page.click('#find button');
+    await page.waitForSelector('#find-msg >> text=No car in stock with "ZZ999"');
+    await page.fill('#stock', '150863');
+    await page.click('#find button');
+    await page.waitForSelector('.shoot-car >> text=2018 Jeep Wrangler Sport S');
+    await page.click('#next');
+    await page.fill('#stock', '#r287418b');
+    await page.click('#find button');
+    await page.waitForSelector('.shoot-car');
+    const t = await page.textContent('.shoot-car');
+    assert(t.includes('2018 Jeep Wrangler Sport S') && t.includes('R287418B') && t.includes('…JW150863') && t.includes('32 photos on file'), t);
+    assert(await page.isChecked('#cover'), 'only stock photos on file, so new photos go first by default');
+    assert((await page.getAttribute('#cam', 'capture')) === 'environment' && (await page.getAttribute('#cam', 'accept')) === 'image/*', 'opens the rear camera');
+  });
+  await step('each shot uploads to that car, in order, ahead of the stock photos', async () => {
+    await page.setInputFiles('#cam', jpg(1));
+    await page.setInputFiles('#cam', jpg(2));
+    await page.setInputFiles('#roll', [jpg(3), jpg(4)]);
+    await page.waitForSelector('.shoot-status >> text=All 4 photos uploaded', { timeout: 15000 });
+    const photos = (await db()).vehicle_photos.filter((p) => p.vehicle_id === V).sort((a, b) => a.position - b.position);
+    const mine = photos.filter((p) => p.uploaded_by === PHOTO);
+    assert(mine.length === 4 && mine.every((p) => p.source === 'upload'), JSON.stringify(mine));
+    assert(photos.slice(0, 4).every((p) => p.uploaded_by === PHOTO), 'new photos first; the first shot is the cover');
+    const ups = await page.evaluate(() => window.__UPLOADS);
+    assert(ups.slice(-4).every((u) => new RegExp(`^${D}/vehicles/${V}/[0-9a-f-]{36}\\.jpg$`).test(u.path)), JSON.stringify(ups.slice(-4).map((u) => u.path)));
+  });
+  await page.screenshot({ path: join(SHOTS, '17-photographer-phone.png'), fullPage: true });
+  await step('a dropped upload retries by itself; moving to the next car keeps photos with the right car', async () => {
+    await page.evaluate((T) => {
+      window.__DB.vehicles.push({ id: T, dealership_id: window.__DB.dealerships[0].id, slug: '2025-chevrolet-trax', status: 'draft', condition: 'used', stock_number: 'PJ17152',
+        vin: 'KL77LKEP3SC259877', year: 2025, make: 'Chevrolet', model: 'Trax', trim: 'ACTIV', features: [], specs: {}, price_stack: [], source: 'feed', created_at: '2026-10-30T12:00:00Z' });
+      window.__FAIL_UPLOADS = 1; window.__SAVE();
+    }, TRAX);
+    await page.setInputFiles('#cam', jpg(5));                 // the Jeep's 5th photo: its first upload attempt fails
+    await page.click('#next');
+    await page.fill('#stock', 'pj17152');
+    await page.click('#find button');
+    await page.waitForSelector('.shoot-car >> text=2025 Chevrolet Trax ACTIV');
+    assert((await page.textContent('.shoot-car')).includes('0 photos on file'), 'draft car with no photos is found');
+    await page.setInputFiles('#cam', jpg(6));                 // the Trax's first photo
+    await page.waitForSelector('.shoot-thumb.retrying, .shoot-thumb.done', { timeout: 5000 });
+    await page.waitForSelector('.shoot-status >> text=All 6 photos uploaded', { timeout: 20000 });
+    const all = (await db()).vehicle_photos.filter((p) => p.uploaded_by === PHOTO);
+    assert(all.filter((p) => p.vehicle_id === V).length === 5 && all.filter((p) => p.vehicle_id === TRAX).length === 1, all.map((p) => p.vehicle_id).join());
+    const ups = await page.evaluate(() => window.__UPLOADS);
+    assert(ups.some((u) => u.path.includes(`/vehicles/${TRAX}/`)) && ups.filter((u) => u.path.includes(`/vehicles/${V}/`)).length === 5, 'storage paths per car');
+  });
+  await step('nothing else is loaded for a photographer (no inbox counts, no leads)', async () => {
+    const calls = await page.evaluate(() => window.__CALLS.map((c) => c.table).filter(Boolean));
+    for (const t of ['customers', 'leads', 'messages', 'vehicle_chomes', 'vehicle_factory_data', 'dealership_settings']) assert(!calls.includes(t), `queried ${t}`);
+  });
+  const stubErrors = await page.evaluate(() => window.__STUB_ERRORS);
+  await step('no schema/stub errors (photographer)', async () => assert(!stubErrors.length, stubErrors.join('; ')));
   await context.close();
 }
 

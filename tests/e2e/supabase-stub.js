@@ -137,6 +137,11 @@ class Query {
   delete() { this.op = 'delete'; return this; }
   eq(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] === v); return this; }
   in(c, vs) { checkCol(this.table, c); this.filters.push((r) => vs.includes(r[c])); return this; }
+  ilike(c, pat) {
+    checkCol(this.table, c);
+    const re = new RegExp('^' + String(pat).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$', 'i');
+    this.filters.push((r) => r[c] != null && re.test(String(r[c]))); return this;
+  }
   gt(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] > v); return this; }
   gte(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] >= v); return this; }
   lt(c, v) { checkCol(this.table, c); this.filters.push((r) => r[c] < v); return this; }
@@ -273,6 +278,7 @@ export function createClient() {
       from: (bucket) => ({
         upload: async (path, file) => {
           if (!/^[0-9a-f-]{36}\//.test(path)) return { error: { message: 'STUB: bad storage path ' + path } };
+          if (window.__FAIL_UPLOADS > 0) { window.__FAIL_UPLOADS--; return { error: { message: 'Network connection was lost' } }; }
           window.__UPLOADS.push({ bucket, path, size: file.size, type: file.type });
           return { data: { path }, error: null };
         },
