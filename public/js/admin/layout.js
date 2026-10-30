@@ -34,7 +34,10 @@ export async function adminPage(el, active, { adminOnly = false, photographer = 
     return null;
   }
   if (!ctx) {
-    navigate(`/admin/login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
+    // Keep the #hash: when an emailed link fails, Supabase puts the reason there (error_description=…), and the
+    // sign-in page shows it instead of a blank form.
+    const hash = /error/.test(location.hash) ? location.hash : '';
+    navigate(`/admin/login?next=${encodeURIComponent(location.pathname + location.search)}${hash}`, { replace: true });
     return null;
   }
   if (!ctx.role) {

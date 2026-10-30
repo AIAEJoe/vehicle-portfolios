@@ -144,6 +144,8 @@ Per-dealership plan options:
 3. **Put these photos first** is ticked when the car has only stock/feed photos, so the first shot becomes the cover, in shooting order. Untick it to add photos after the existing ones.
 4. **Done, next car.** Uploads still running stay with the car they were taken for. Failed uploads retry by themselves (2s, 6s, 15s, 30s, and again when the phone comes back online), then offer **Try again**. Leaving the page with uploads pending asks first.
 
+**Getting staff signed in.** Invites and sign-in links are one-time and expire. If one fails, the sign-in page now says why (it keeps Supabase's error from the link). Staff can tap *Email me a sign-in link*, and admins can use **Send sign-in link** next to anyone on the Staff page. Either way, the link opens *Your account* to set a password.
+
 **Photographer logins** (Staff → invite, role *Photographer*) only get the Photos page and their Account page. In the database (`0009_photographer.sql`), photographers aren't counted by `vp_is_member()`, so prices, leads, customers, messages, CHOMES, factory data and settings stay closed to them. They can read the dealership's vehicles, add `upload` photos as themselves, delete only their own photos, and upload files only to `<dealership>/vehicles/<vehicle>/<file>.jpg|png|webp|heic`. Everyone else on staff can use the Photos page too.
 
 **Printing on the lot.** Once a car is found, the Photos page has **🖨 Window sticker** and **🖨 Buyers Guide** (used/CPO) buttons; they open in a new tab so uploads keep going, and print from the phone (Share → Print / AirPrint). For photographers, the sticker page gets the car's customer-safe CHOMES facts through `vp_sticker_chomes()` (never recon cost, notes, demand note, inspector or provenance) and its tracked QR link through `vp_qr_share()` (`0010_photographer_print.sql`). They still can't read CHOMES or shares directly, and other admin pages (like the QR window card) stay closed to them.
@@ -202,6 +204,8 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    select public.vp_add_platform_admin('jthistle729@gmail.com');
    select public.vp_add_member('nsbchevy', 'jthistle729@gmail.com', 'owner');
    ```
+
+5. **Authentication → Emails → SMTP Settings:** turn on custom SMTP. Supabase's built-in sender is for testing: it sends only a few emails an hour and may only deliver to your Supabase team, so invites and sign-in links won't reach staff. With Resend: host `smtp.resend.com`, port `465`, username `resend`, password a Resend API key, sender e.g. `no-reply@mail.aiautoengine.com`. Then **Authentication → Rate Limits**: raise emails per hour (e.g. 100).
 
 ### 2. Cloudflare Pages
 1. Connect this repo: **Workers & Pages → Create → Pages**. Build command: *none*. Output directory: `public`.
@@ -268,7 +272,7 @@ bash tests/sql/run.sh                  # 221 checks: RLS isolation between store
                                        #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program, photographer role
 node --test tests/functions/*.test.js  # 85 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding, warranty program): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 82 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, photographer (phone), inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 84 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, photographer (phone), inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.

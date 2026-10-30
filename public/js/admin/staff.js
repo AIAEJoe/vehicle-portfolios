@@ -3,6 +3,11 @@ import { sb, html, mount, must, api, $, on, errMsg, toast, initials } from '../c
 import { adminPage, resetAdminContext } from './layout.js';
 import { resizeImage, uploadFile } from './media.js';
 
+// Supabase's built-in email sender allows only a few emails an hour; say so plainly.
+const emailErr = (e) => (/rate limit/i.test(errMsg(e))
+  ? 'Supabase hit its email limit. Its built-in sender only allows a few emails an hour: set up custom SMTP (Resend) under Supabase → Authentication → Emails, or try again in an hour.'
+  : errMsg(e));
+
 export default async function staffPage(el) {
   const page = await adminPage(el, 'staff');
   if (!page) return;
@@ -39,13 +44,14 @@ export default async function staffPage(el) {
           ${people.find((p) => p.user_id === m.user_id) ? '' : html`<span class="small sub"> · not linked to a salesperson</span>`}</span>
           ${m.user_id !== ctx.user.id && m.role !== 'owner' ? html`<span class="btn-row">
             <select data-role="${m.user_id}" style="width:auto;min-height:34px;padding:4px 8px" aria-label="Role"><option value="sales" ${m.role === 'sales' ? 'selected' : ''}>Sales</option><option value="admin" ${m.role === 'admin' ? 'selected' : ''}>Admin</option><option value="photographer" ${m.role === 'photographer' ? 'selected' : ''}>Photographer</option></select>
+            <button class="btn alt sm" data-link="${m.email}" title="Emails them a one-time link that signs them in and opens their account page to set a password">Send sign-in link</button>
             <button class="btn danger sm" data-remove="${m.user_id}">Remove</button></span>` : ''}</div>`)}
         <form id="invite" style="margin-top:14px"><h3 style="font-size:16px;margin-bottom:0">Invite someone</h3>
           <div class="grid3"><div><label for="ie">Email</label><input id="ie" name="email" type="email" required></div>
           <div><label for="ir">Role</label><select id="ir" name="role"><option value="sales">Sales (vehicles, sharing, leads)</option><option value="admin">Admin (everything)</option><option value="photographer">Photographer (vehicle photos only)</option></select></div>
           <div><label for="is">Link to salesperson</label><select id="is" name="staff_id"><option value="">None</option>${people.filter((p) => !p.user_id).map((p) => html`<option value="${p.id}">${p.full_name}</option>`)}</select></div></div>
           <button class="btn" style="margin-top:12px">Send invite</button>
-          <p class="hint">They'll get an email to set a password. Turn off public sign-ups in Supabase so only invited people can join.</p>
+          <p class="hint">They'll get an email with a link that signs them in and asks them to set a password. Links work once and expire; if theirs didn't work, use <b>Send sign-in link</b> next to their name. Turn off public sign-ups in Supabase so only invited people can join.</p>
         </form></div>` : ''}`);
   }
 
@@ -104,14 +110,22 @@ export default async function staffPage(el) {
     btn.disabled = true;
     try {
       const r = await api('/api/invite', { method: 'POST', auth: true, body: fd });
-      toast(r.invited ? `Invite sent to ${fd.email}` : `${fd.email} already had an account and now has access`);
+      toast(r.invited ? `Invite sent to ${fd.email}` : `${fd.email} already had an account and now has access. Use "Send sign-in link" if they need to set a password.`);
       await load();
-    } catch (err) { toast(errMsg(err), 'bad'); }
+    } catch (err) { toast(emailErr(err), 'bad'); }
     finally { btn.disabled = false; }
   });
   on(main, 'change', '[data-role]', async (e, sel) => {
     try { must(await sb.from('dealership_members').update({ role: sel.value }).eq('dealership_id', D).eq('user_id', sel.dataset.role)); toast('Role updated'); }
     catch (err) { toast(errMsg(err), 'bad'); }
+  });
+  on(main, 'click', '[data-link]', async (e, b) => {
+    b.disabled = true;
+    // Doesn't touch your own session: it only asks Supabase to email them a one-time sign-in link.
+    const { error } = await sb.auth.signInWithOtp({ email: b.dataset.link, options: { shouldCreateUser: false, emailRedirectTo: `${location.origin}/admin/account?welcome=1` } });
+    b.disabled = false;
+    if (error) { toast(emailErr(error), 'bad'); return; }
+    toast(`Sign-in link sent to ${b.dataset.link}. They should open it on the phone they'll use.`);
   });
   on(main, 'click', '[data-remove]', async (e, b) => {
     const m = members.find((x) => x.user_id === b.dataset.remove);

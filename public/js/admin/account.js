@@ -6,6 +6,7 @@ export default async function account(el) {
   if (!page) return;
   const { ctx, main } = page;
   const fresh = /type=(invite|magiclink|recovery)/.test(location.hash) || new URLSearchParams(location.search).has('welcome');
+  if (location.hash || location.search) history.replaceState({}, '', '/admin/account'); // don't leave tokens in the address bar
   mount(main, html`<div class="page-head"><h1>Your account</h1></div>
     <div class="card" style="max-width:520px">
       <p>Signed in as <strong>${ctx.user.email}</strong> · ${ctx.role} at ${ctx.dealership.name}</p>
