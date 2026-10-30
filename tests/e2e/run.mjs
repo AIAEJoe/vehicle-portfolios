@@ -176,6 +176,12 @@ async function setup(context) {
       assert(route.request().headers().authorization, 'import sends auth');
       return json(route, { vehicle: { vin: '1GCUYDED5RZ100777', year: 2024, make: 'Chevrolet', model: 'Silverado 1500', trim: 'RST', price: 51995, mileage: 5, condition: 'new', photos: ['/seed/jeep-03.jpg', '/seed/jeep-04.jpg'], listing_url: 'https://www.newsmyrnachevy.com/inventory/x/' } });
     }
+    if (p === '/api/photos/copy-in') {
+      const b = route.request().postDataJSON();
+      (api.copyins ||= []).push({ ...b, auth: !!route.request().headers().authorization });
+      return json(route, api.copyins.length === 1 ? { ok: true, copied: 11, failed: [{ id: 'x', stock_number: 'R287418B', url: 'https://img/x.jpg', error: "the photo's server answered 404" }], done: false }
+        : { ok: true, copied: 3, failed: [], done: true });
+    }
     if (p.startsWith('/api/inventory/')) { api.ingests++; return json(route, { ok: true, result: { inserted: 4, updated: 10, marked_sold: 1, rows: 14 } }); }
     if (p === '/api/invite') return json(route, { ok: true, invited: true, user_id: 'x' });
     if (p === '/api/messages/send') {
@@ -1075,6 +1081,11 @@ console.log('Dashboard');
     assert(s.crm_adf_email === 'nsbchevy@eleadtrack.net' && s.feed_url === 'https://feeds.homenet.test/nsb.csv' && s.notify_on_open === true, JSON.stringify(s));
     assert((await page.inputValue('input[aria-label="Ingest URL"]')).endsWith('/api/inventory/ingest?token=tok123'), 'ingest url');
     assert((await page.inputValue('input[aria-label="Photo feed URL"]')).endsWith('/api/feeds/photos?token=pftok456'), 'photo feed url');
+    await page.check('#copyin-new');
+    await page.click('#copyin-go');
+    await page.waitForSelector('#copyin-out >> text=Done: 14 photos copied.');
+    assert((await page.textContent('#copyin-out')).includes("1 photo couldn't be copied"), 'failures listed');
+    assert(JSON.stringify(api.copyins.map((c) => [c.include_new, c.skip, c.auth])) === '[[true,0,true],[true,1,true]]', JSON.stringify(api.copyins));
     await page.click('#sync');
     await page.waitForSelector('text=Feed synced: 4 added');
     await page.setInputFiles('#upload input[type=file]', { name: 'feed.csv', mimeType: 'text/csv', buffer: Buffer.from('VIN,Stock\n1C4GJXAG5JW150863,R1\n') });

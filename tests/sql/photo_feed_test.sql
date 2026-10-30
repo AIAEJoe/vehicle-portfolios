@@ -19,3 +19,4 @@ select pg_temp.check((select count(*) from vehicle_photos p join vehicles v on v
 insert into vehicle_photos (vehicle_id, url, position, source) select id, 'https://listing/b.jpg', 2, 'import' from vehicles where stock_number = 'PF1';
 select pg_temp.check((select count(*) from vehicle_photos p join vehicles v on v.id = p.vehicle_id where v.stock_number = 'PF1') = 3, 'uploads, imports and earlier feed photos untouched');
 delete from vehicles where stock_number = 'PF1';
+select pg_temp.check(exists (select 1 from information_schema.columns where table_name = 'vehicle_photos' and column_name = 'copied_from'), 'copied photos remember where they came from');

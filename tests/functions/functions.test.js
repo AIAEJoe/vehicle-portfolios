@@ -478,3 +478,70 @@ test('photo feed: the inventory token or no token is refused', async () => {
     assert.equal(res.status, 401, t);
   }
 });
+
+// ---------- copy SlipStream / feed photos in ----------
+import { onRequestPost as copyInPost, BATCH as COPY_BATCH } from '../../functions/api/photos/copy-in.js';
+
+function mockCopyIn(store, rows) {
+  store.uploads = []; store.patches = []; store.deletes = [];
+  mock((u) => u.includes('/rest/v1/dealerships'), () => [DEALER]);
+  mock('/auth/v1/user', (u, c) => (c.headers.authorization === 'Bearer admin-jwt' ? { id: 'u1' } : c.headers.authorization === 'Bearer sales-jwt' ? { id: 'u2' } : new Response('{}', { status: 401 })));
+  mock('/rest/v1/dealership_members', (u) => [{ role: u.includes('u2') ? 'sales' : 'admin' }]);
+  mock('/rest/v1/platform_admins', () => []);
+  mock((u, c) => u.includes('/rest/v1/vehicle_photos?') && c.method === 'GET', (u) => { store.query = u; return rows; });
+  mock((u, c) => u.includes('/rest/v1/vehicle_photos?') && c.method === 'PATCH', (u, c) => { if (store.failPatch) return new Response('{"message":"nope"}', { status: 400 }); store.patches.push({ u, body: JSON.parse(c.body) }); return ''; });
+  mock((u, c) => u.includes('/storage/v1/object/media/') && c.method === 'POST', (u, c) => { store.uploads.push({ u, type: c.headers['content-type'], size: c.body.byteLength }); return { Key: 'x' }; });
+  mock((u, c) => u.includes('/storage/v1/object/media/') && c.method === 'DELETE', (u) => { store.deletes.push(u); return ''; });
+  mock('https://img.homenet.test/ok', () => new Response(new Uint8Array([255, 216, 255, 1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } }));
+  mock('https://img.homenet.test/gone', () => new Response('nf', { status: 404 }));
+  mock('https://img.homenet.test/html', () => new Response('<html>', { headers: { 'content-type': 'text/html' } }));
+}
+const copyReq = (body, token = 'admin-jwt') => copyInPost(ctx(req('https://nsbchevy.aiautoengine.com/api/photos/copy-in', {
+  method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })));
+const photoRow = (id, url) => ({ id, vehicle_id: VEHICLE.id, dealership_id: 'd1', url, position: 0, vehicles: { condition: 'used', status: 'published', stock_number: 'R287418B' } });
+
+test('copy-in: downloads each photo into our storage and makes it our own, keeping the old address', async () => {
+  const store = {};
+  mockCopyIn(store, [photoRow('p1', 'https://img.homenet.test/ok/1.jpg'), photoRow('p2', 'https://img.homenet.test/gone/2.jpg'), photoRow('p3', 'https://img.homenet.test/html/3')]);
+  const r = await (await copyReq({})).json();
+  assert.equal(r.copied, 1);
+  assert.deepEqual(r.failed.map((f) => [f.id, f.error, f.stock_number]), [['p2', "the photo's server answered 404", 'R287418B'], ['p3', 'not a photo (text/html)', 'R287418B']]);
+  assert.equal(r.done, true, 'fewer than a batch means done');
+  assert.match(store.query, /source=in\.\(feed,url,import\)/);
+  assert.match(store.query, /storage_path=is\.null/);
+  assert.match(store.query, /vehicles\.condition=in\.\(used,certified\)/, 'used cars only by default');
+  assert.match(store.query, /vehicles\.status=in\.\(draft,published\)/);
+  assert.equal(store.uploads.length, 1);
+  assert.match(store.uploads[0].u, new RegExp(`/media/d1/vehicles/${VEHICLE.id}/[0-9a-f-]{36}\\.jpg$`));
+  assert.equal(store.uploads[0].type, 'image/jpeg');
+  const patch = store.patches[0];
+  assert.match(patch.u, /id=eq\.p1&storage_path=is\.null/, 'never overwrites a photo copied meanwhile');
+  assert.equal(patch.body.source, 'upload');
+  assert.equal(patch.body.copied_from, 'https://img.homenet.test/ok/1.jpg');
+  assert.match(patch.body.url, /\/storage\/v1\/object\/public\/media\/d1\/vehicles\//);
+});
+
+test('copy-in: new cars on request, skip passes over earlier failures, full batch is not done', async () => {
+  const store = {};
+  mockCopyIn(store, Array.from({ length: COPY_BATCH }, (_, i) => photoRow(`p${i}`, `https://img.homenet.test/ok/${i}.jpg`)));
+  const r = await (await copyReq({ include_new: true, skip: 3 })).json();
+  assert.equal(r.copied, COPY_BATCH);
+  assert.equal(r.done, false);
+  assert.match(store.query, /vehicles\.condition=in\.\(new,used,certified\)/);
+  assert.match(store.query, new RegExp(`limit=${COPY_BATCH}&offset=3`));
+});
+
+test('copy-in: a failed database update removes the stored file again', async () => {
+  const store = { failPatch: true };
+  mockCopyIn(store, [photoRow('p1', 'https://img.homenet.test/ok/1.jpg')]);
+  store.failPatch = true;
+  const r = await (await copyReq({})).json();
+  assert.equal(r.copied, 0);
+  assert.equal(store.deletes.length, 1);
+});
+
+test('copy-in: admins only', async () => {
+  mockCopyIn({}, []);
+  assert.equal((await copyReq({}, 'sales-jwt')).status, 403);
+  assert.equal((await copyReq({}, 'nobody')).status, 401);
+});

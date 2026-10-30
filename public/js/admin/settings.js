@@ -117,6 +117,13 @@ export default async function settings(el) {
       </form>`}
     </div>
 
+    <div class="card" id="copyin"><h2>Copy SlipStream photos in</h2>
+      <p class="hint" style="margin-top:0">Downloads the photos your cars already have from the feed (SlipStream's, hosted by HomeNet) and listings into your own storage, in the same order. They keep working after SlipStream is cancelled, and they go out in your photo feed. Cars your photographer has already shot keep their new photos. Safe to run again: it only copies photos that aren't copied yet.</p>
+      <label class="check small"><input type="checkbox" id="copyin-new"> Include new cars too (their feed photos are usually GM stock images)</label>
+      <div class="btn-row" style="margin-top:10px"><button type="button" class="btn" id="copyin-go">Copy photos in</button></div>
+      <div id="copyin-out" role="status" aria-live="polite"></div>
+    </div>
+
     <div class="card" id="photofeed"><h2>Photo feed for third-party sites</h2>
       ${s.photo_feed_token ? html`<p class="hint" style="margin-top:0">Give this link to HomeNet (or vAuto / Dealer Inspire) as your photo source, in place of SlipStream. It lists every live car your photographer has shot, with its photos in your display order (cover first), and updates as soon as photos are added, moved or deleted. Stock and feed photos aren't included.</p>
       <div class="copy-field"><input readonly value="${photoFeedUrl}" aria-label="Photo feed URL"><button type="button" class="btn alt sm" id="copy-photofeed">Copy</button></div>
@@ -164,6 +171,30 @@ export default async function settings(el) {
     </div>`);
 
     $('#copy-ingest', main).onclick = () => copyText(ingestUrl);
+    $('#copyin-go', main).onclick = async (e) => {
+      const btn = e.currentTarget;
+      const out = $('#copyin-out', main);
+      const includeNew = $('#copyin-new', main).checked;
+      let copied = 0, skip = 0, rounds = 0;
+      const failed = [];
+      btn.disabled = true;
+      const show = (msg, done) => mount(out, html`<p class="${done ? (failed.length ? 'notice warn' : 'notice ok') : 'small'}">${msg}</p>
+        ${failed.length ? html`<details><summary class="small">${failed.length} photo${failed.length === 1 ? '' : 's'} couldn't be copied</summary><ul class="small">${failed.slice(0, 50).map((f) => html`<li>Stock ${f.stock_number || '–'}: ${f.error}</li>`)}</ul></details>` : ''}`);
+      show('Starting…');
+      try {
+        for (;;) {
+          const r = await api('/api/photos/copy-in', { method: 'POST', auth: true, body: { include_new: includeNew, skip } });
+          copied += r.copied;
+          failed.push(...r.failed);
+          skip += r.failed.length;
+          if (r.done || ++rounds > 2000) break;
+          show(`Copying… ${copied} photo${copied === 1 ? '' : 's'} copied so far. Keep this page open.`);
+        }
+        show(copied || failed.length ? `Done: ${copied} photo${copied === 1 ? '' : 's'} copied.` : 'Nothing to copy: every photo is already in your storage.', true);
+      } catch (err) {
+        show(`Stopped after ${copied} photo${copied === 1 ? '' : 's'}: ${errMsg(err)}. Press the button again to carry on.`, true);
+      } finally { btn.disabled = false; }
+    };
     if ($('#copy-photofeed', main)) $('#copy-photofeed', main).onclick = () => copyText(photoFeedUrl);
 
     $('#profile', main).addEventListener('submit', async (e) => {
