@@ -32,12 +32,15 @@ export function handle(fn) {
 }
 
 /** Which dealership a request is for, based on the host name. */
+// Subdomains that are other AI Authority Engine apps, never dealerships (seo = SEO Audits).
+const RESERVED = new Set(['www', 'app', 'seo']);
+
 export function dealerSlugFromHost(host, env = {}) {
   host = String(host || '').toLowerCase().split(':')[0];
   const root = String(env.ROOT_DOMAIN || 'aiautoengine.com').toLowerCase();
   if (host.endsWith('.' + root)) {
     const sub = host.slice(0, -(root.length + 1)).split('.').pop();
-    if (sub && sub !== 'www' && sub !== 'app') return sub;
+    if (sub && !RESERVED.has(sub)) return sub;
   }
   return env.DEFAULT_DEALER || 'nsbchevy';
 }
