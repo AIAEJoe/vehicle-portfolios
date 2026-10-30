@@ -5,10 +5,12 @@
 // Starting point for New Smyrna Beach Chevrolet's program (form TWS-LW-AMSI F 06/24). The covered-systems wording
 // is a proposed plain-language summary of typical manufacturer powertrain coverage; the dealership confirms it
 // with its administrator (Total Warranty Services) or compliance before applying it to cars.
-const DURATION = 'For as long as the original purchaser owns the vehicle (not transferable), subject to the maintenance and inspection requirements in the warranty';
+// NSB descriptions advertise "Lifetime Warranty - Unlimited Time & Miles": the form sets no mileage limit and runs for as
+// long as the buyer owns the car, so the Buyers Guide says so, along with the limits the form actually has.
+const DURATION = 'For as long as the original purchaser owns the vehicle, with no mileage limit (not transferable), subject to the maintenance and inspection requirements in the warranty';
 export const DEFAULT_PROGRAM = {
   name: 'Lifetime Limited Powertrain Warranty',
-  match: 'lifetime powertrain warranty',
+  match: 'lifetime warranty',
   labor_pct: 100,
   parts_pct: 100,
   deductible: 'A $100 deductible applies to each covered repair',
@@ -17,7 +19,7 @@ export const DEFAULT_PROGRAM = {
     { system: 'Transmission or transaxle: case and internal parts, torque converter', duration: DURATION },
     { system: 'Drive axles: axle housings and internal parts, axle shafts, constant-velocity joints', duration: DURATION },
   ],
-  sticker_line: 'Lifetime Limited Powertrain Warranty included',
+  sticker_line: 'Lifetime Limited Powertrain Warranty – unlimited time & miles while you own it',
 };
 
 // "Lifetime Limited Power-Train Warranty", "lifetime powertrain warranties" and "LIFETIME WARRANTY (powertrain)" all

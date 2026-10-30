@@ -59,6 +59,11 @@ select pg_temp.check(public.vp_apply_bg_program(array[(select id from vehicles w
 update vehicles set bg_warranty = 'as_is' where id = pg_temp.jeep();
 reset role;
 select pg_temp.check((select bg_program is null from vehicles where id = pg_temp.jeep()), 'switching the car to As Is drops the program label');
+\ir ../../supabase/run-2026-10-30d.sql
+select pg_temp.check((select bg_program->>'match' = 'lifetime warranty' and jsonb_array_length(bg_program->'systems') = 2
+  and bg_program->'systems'->0->>'system' like 'Engine:%' and bg_program->'systems'->1->>'system' like 'Transmission%'
+  and bg_program->'systems'->1->>'duration' like '%no mileage limit (not transferable)%' and bg_program->>'sticker_line' like '%unlimited time & miles%'
+  and bg_program->>'name' = 'Lifetime Limited Powertrain Warranty' from dealerships where slug = 'nsbchevy'), 'wording update keeps systems in order and only changes match, durations and sticker line');
 delete from vehicles where vin = '3GNKBHR40SS000001';
 update vehicles set bg_warranty = null where id = pg_temp.jeep();
 update dealerships set bg_program = null where slug = 'nsbchevy';

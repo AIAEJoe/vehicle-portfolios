@@ -751,7 +751,7 @@ console.log('Dashboard');
     await page.waitForSelector('#details');
   });
   await step('warranty program: set up from the NSB form; shorthand blocked', async () => {
-    await page.evaluate(() => { const v = window.__DB.vehicles[0]; v.description = 'Clean CARFAX. Includes our Lifetime Limited Powertrain Warranty!'; window.__SAVE(); });
+    await page.evaluate(() => { const v = window.__DB.vehicles[0]; v.description = 'Clean CARFAX. Lifetime Warranty - Unlimited Time & Miles'; window.__SAVE(); });
     await page.goto(`${ORIGIN}/admin/settings`);
     await page.waitForSelector('#wp-form');
     const t = await page.textContent('#wp-form');
@@ -799,14 +799,14 @@ console.log('Dashboard');
     await p2.waitForSelector('.bg-print-page .bg-front');
     const g = await p2.textContent('.bg-print-page');
     for (const x of ['DEALER WARRANTY', 'LIMITED WARRANTY.', 'Engine: cylinder block, cylinder heads and internal lubricated parts', 'Transmission or transaxle: case and internal parts, torque converter',
-      'Drive axles: axle housings and internal parts, axle shafts, constant-velocity joints', 'For as long as the original purchaser owns the vehicle (not transferable)', 'A $100 deductible applies to each covered repair'])
+      'Drive axles: axle housings and internal parts, axle shafts, constant-velocity joints', 'For as long as the original purchaser owns the vehicle, with no mileage limit (not transferable)', 'A $100 deductible applies to each covered repair'])
       assert(g.includes(x), x);
     assert((g.match(/For as long as the original purchaser owns the vehicle/g) || []).length === 1, 'shared duration printed once');
     assert(!/power[\s-]*train/i.test(g), 'no powertrain shorthand on the guide');
     await p2.screenshot({ path: join(SHOTS, '05h-buyers-guide-lifetime.png'), fullPage: true });
     await p2.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
     await p2.waitForSelector('.ws-warranty');
-    assert((await p2.textContent('.ws-warranty')).includes('Lifetime Limited Powertrain Warranty included'), 'sticker line');
+    assert((await p2.textContent('.ws-warranty')).includes('Lifetime Limited Powertrain Warranty – unlimited time & miles while you own it'), 'sticker line');
     await p2.close();
   });
   await step('settings: Buyers Guide complaint contact and default', async () => {
