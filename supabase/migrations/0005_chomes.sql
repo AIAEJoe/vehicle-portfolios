@@ -234,7 +234,9 @@ begin
     drivetrain   = coalesce(drivetrain, nullif(p_fields->>'drivetrain', '')),
     engine       = coalesce(engine, nullif(p_fields->>'engine', '')),
     transmission = coalesce(transmission, nullif(p_fields->>'transmission', '')),
-    fuel_type    = coalesce(fuel_type, nullif(p_fields->>'fuel_type', ''))
+    fuel_type    = coalesce(fuel_type, nullif(p_fields->>'fuel_type', '')),
+    mpg_city     = coalesce(mpg_city, nullif(p_fields->>'mpg_city', '')::int),
+    mpg_hwy      = coalesce(mpg_hwy, nullif(p_fields->>'mpg_hwy', '')::int)
   where id = p_vehicle_id
   returning * into v;
   perform set_config('vp.source', '', true);

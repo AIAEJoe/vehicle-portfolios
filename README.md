@@ -148,9 +148,16 @@ Per-dealership plan options:
 **Original factory sticker** (Window sticker tab → *Find factory sticker*, `POST /api/window-sticker`). Fetches the manufacturer's own PDF by VIN, stores it in the media bucket and adds it to the vehicle's documents (`source = 'oem'`), replacing only an earlier fetched copy. Only real PDFs are accepted.
 - Ford/Lincoln: `windowsticker.forddirect.com`. Stellantis (Jeep, Ram, Dodge, Chrysler, Fiat, Alfa Romeo): the brand site's `/hostd/windowsticker/`. Usually about 2012 and newer. These aren't documented APIs and can change; the URLs are in `functions/_lib/window-sticker.js`.
 - **GM:** `cws.gm.com` stopped returning stickers in Oct 2026 (GM moved them behind its owner and dealer logins). The lookup still tries it, then tells staff to download the sticker from **GM GlobalConnect** and upload it on the Documents tab (type "Window sticker").
-- Other brands (Toyota, Honda, Kia…) don't publish stickers: upload them on the Documents tab. `VINAUDIT_API_KEY` enables VinAudit's window sticker API as a fallback (`source = 'provider'`), but as of Oct 2026 that API is still "coming soon". iSeeCars (developer preview, original PDFs) is the other candidate to plug in.
+- Other brands (Toyota, Honda, Kia…) don't publish stickers: upload them on the Documents tab. VinAudit's window sticker API ("coming soon" as of Oct 2026) can be switched on as a fallback with `VINAUDIT_WINDOW_STICKERS=1` once it's enabled on your key (`source = 'provider'`). iSeeCars (developer preview, original PDFs) is the other candidate.
 
-**Option packages into CHOMES.** On the CHOMES tab, *Read options from the factory sticker* opens any window sticker PDF on the vehicle (fetched or uploaded) in the browser with pdf.js, reads the optional-equipment section and lists what it found. Staff tick what to add, then save.
+**Factory data from the VIN** (Window sticker tab → *Get factory data*, `POST /api/vehicle-specs`). Uses the VinAudit VIN decoder (`VINAUDIT_API_KEY`, about $0.10 a query on the $100/month plan) for any brand:
+- Fills the vehicle's **empty** basics (engine, transmission, drivetrain, fuel type, city/highway MPG, body style), labelled "VIN decode" in CHOMES.
+- Saves the answer in `vehicle_factory_data` (staff only; written only by the server). Each VIN is paid for once; *Look up again* refreshes it.
+- **What it is:** equipment for the model and trim, every item "Standard". It does **not** say which options or packages were built into this car (VinAudit's as-built Build Data API is "coming soon"). Tested against a 2025 Chevrolet Trax ACTIV: the decoder's prices didn't add up (base + options + destination ≠ total; two destination charges) and it gave two different lengths and wheelbases. So prices are shown to staff only, flagged when inconsistent, and never printed; dimensions are never shown to customers.
+- **Factory equipment sheet** (`/admin/vehicles/<id>/factory-sheet`, US Letter): specs, fuel economy and standard equipment by group, titled as built from VIN data for the trim, *not* the manufacturer's window sticker. No prices, no dimensions.
+- **CHOMES highlight picker:** tick up to five of the trim's standard features as the vehicle's highlights; they print on the dealer sticker.
+
+ On the CHOMES tab, *Read options from the factory sticker* opens any window sticker PDF on the vehicle (fetched or uploaded) in the browser with pdf.js, reads the optional-equipment section and lists what it found. Staff tick what to add, then save.
 
 ## Deploy
 
@@ -161,6 +168,7 @@ Per-dealership plan options:
    - `supabase/seed.sql`
    - `supabase/migrations/0005_chomes.sql` (CHOMES). On an existing install, run `supabase/run-2026-10-23.sql` instead; it's the same and safe to run twice.
    - `supabase/migrations/0006_window_stickers.sql` (window stickers). On an existing install, run `supabase/run-2026-10-30.sql`; also safe to run twice.
+   - `supabase/migrations/0007_factory_data.sql` (factory data from the VIN). On an existing install, run `supabase/run-2026-10-30b.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -230,11 +238,11 @@ If you register a dealership in the Twilio Console instead, paste the SIDs under
 ## Tests
 
 ```bash
-bash tests/sql/run.sh                  # 167 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
-                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules
-node --test tests/functions/*.test.js  # 72 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
+bash tests/sql/run.sh                  # 176 checks: RLS isolation between stores, consent rules, credential secrecy, usage/billing math, feed sync,
+                                       #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy
+node --test tests/functions/*.test.js  # 80 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 67 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 71 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.

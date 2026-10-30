@@ -32,13 +32,15 @@ export default async function vehicleEdit(el, { id }) {
   const { ctx, main } = page;
   const D = ctx.dealership.id;
 
-  let v, staff, chomes;
+  let v, staff, chomes, factory;
   async function load() {
     v = must(await sb.from('vehicles').select('*, vehicle_photos(*), vehicle_documents(*)').eq('id', id).eq('dealership_id', D).maybeSingle());
     if (!v) throw new Error('Vehicle not found');
     v.vehicle_photos.sort((a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at)));
     staff = must(await sb.from('staff').select('id,full_name,phone,email,active,user_id').eq('dealership_id', D).order('full_name'));
     chomes = await loadChomes(v.id).catch((e) => ({ error: e })); // page still works if the CHOMES update isn't installed
+    factory = await sb.from('vehicle_factory_data').select('vehicle_id,vin,source,data,fetched_at').eq('vehicle_id', v.id).maybeSingle()
+      .then(must).catch((e) => ({ error: e }));
   }
   try { await load(); } catch (e) { mount(main, html`<div class="card">${errMsg(e)} <a href="/admin/vehicles">Back</a></div>`); return; }
 
@@ -603,7 +605,7 @@ export default async function vehicleEdit(el, { id }) {
 
   // ---------------------------------------------------------------- CHOMES
   function chomesView(box) {
-    chomesTab(box, { v, rec: chomes, ctx, staff, onChange: (rec, vehicle) => {
+    chomesTab(box, { v, rec: chomes, ctx, staff, factory: factory && !factory.error ? factory : null, onChange: (rec, vehicle) => {
       chomes = rec;
       if (vehicle) Object.assign(v, vehicle);
       frame();
@@ -612,9 +614,10 @@ export default async function vehicleEdit(el, { id }) {
 
   // ---------------------------------------------------------------- window sticker
   function stickerView(box) {
-    stickerTab(box, { v, chomes, ctx, onChange: (vehicle, docs) => {
-      if (vehicle) Object.assign(v, vehicle);
+    stickerTab(box, { v, chomes, factory, ctx, onChange: async (vehicle, docs, fd) => {
+      if (vehicle) { Object.assign(v, vehicle); chomes = await loadChomes(v.id).catch((e) => ({ error: e })); }
       if (docs) v.vehicle_documents = docs;
+      if (fd) factory = fd;
       frame();
     } });
   }

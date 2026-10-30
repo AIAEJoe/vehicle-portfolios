@@ -93,7 +93,8 @@ test('which manufacturers publish stickers', () => {
   assert.equal(oemSource('1GKS2DKL0RR000001', null).brand, 'GM', 'falls back to the VIN when the make is missing');
   assert.equal(oemSource('JTDKB20U793000001', 'Toyota'), null);
   assert.equal(providerSource('JTDKB20U793000001', {}), null);
-  assert.match(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k&y' }).url, /key=k%26y/);
+  assert.equal(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k' }), null, 'decoder key alone does not call the sticker API');
+  assert.match(providerSource('JTDKB20U793000001', { VINAUDIT_API_KEY: 'k&y', VINAUDIT_WINDOW_STICKERS: '1' }).url, /key=k%26y/);
 });
 
 // ---------- the lookup function ----------
