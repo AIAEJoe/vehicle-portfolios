@@ -283,7 +283,7 @@ export function createClient() {
         localStorage.setItem('stub-session', JSON.stringify(s));
         return { data: { session: s }, error: null };
       },
-      signInWithOtp: async () => ({ data: {}, error: null }),
+      signInWithOtp: async (args) => { window.__CALLS.push({ otp: args }); return window.__OTP_ERROR ? { data: {}, error: { message: window.__OTP_ERROR } } : { data: {}, error: null }; },
       signOut: async () => { localStorage.removeItem('stub-session'); return { error: null }; },
       updateUser: async (attrs) => { window.__CALLS.push({ updateUser: attrs }); return { data: {}, error: null }; },
       onAuthStateChange: (cb) => { listeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; },
