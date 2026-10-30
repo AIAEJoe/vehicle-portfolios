@@ -72,7 +72,7 @@ Platform operators (rows in `platform_admins`) have support access to every deal
 
 ## FTC Buyers Guide (Used Car Rule, 16 CFR 455)
 
-Every used and certified pre-owned vehicle page shows the Buyers Guide (front and back) below Specifications, with an English/Español toggle and a **Print Buyers Guide** page (`/v/<slug>/buyers-guide?lang=en|es`, legal paper, black on white, 7½" × 11¼" per side).
+Every used and certified pre-owned vehicle page shows the Buyers Guide (front and back) below Specifications, with an English/Español toggle and a **Print Buyers Guide** page (`/v/<slug>/buyers-guide?lang=en|es`, US Letter 8½" × 11" at 100%, one side per page, black on white; the FTC minimum is 11" × 7¼").
 
 - Fixed wording is transcribed from the Rule text and Figures 1–6 of Part 455 (eCFR, Oct. 2026) in `public/js/buyers-guide.js`. Don't edit it.
 - Warranty terms are per vehicle (`vehicles.bg_*`), edited on the vehicle's **Buyers Guide** tab by dealership admins only (enforced in the database). The web page and the printed guide render from the same data.
@@ -138,15 +138,26 @@ Per-dealership plan options:
 
 ## Photos on the lot (photographer)
 
-**Photos** (`/admin/shoot`) is a phone-first page for whoever shoots the inventory:
-1. Type the **stock number** (any case, "#" and spaces ignored), or the **last 6 of the VIN**, and tap **Find**. Live and draft cars are searched.
-2. Check the car on screen against the key tag, then tap **📷 Take photos**. The phone's own camera opens (`capture="environment"`). Each shot is resized and uploads to that car in the background. **Add from camera roll** takes several at once.
+**Photos** (`/admin/shoot`) is a phone-first page for whoever shoots the inventory. It replaces SlipStream's photographer app (and LotSync); keep SlipStream until this path has been verified end to end.
+1. Type the **stock number** (any case, "#" and spaces ignored) or **any 4 or more digits of the VIN**, and tap **Find**. Live and draft cars are searched; several matches show as a pick list with the matching digits in bold.
+2. Check the car on screen against the key tag, then shoot:
+   - **📷 Series camera** opens a full-screen camera in the page with a 3×3 rule-of-thirds grid (toggle) and a shutter for shot after shot. On Android it uses the camera's full-resolution capture (`ImageCapture`); on iPhone it grabs the video frame.
+   - **Phone camera** opens the phone's own camera app (`capture="environment"`), one shot at a time. **Camera roll** takes several at once.
+   - Every shot is resized and uploads to that car in the background, two at a time. A copy is kept on the phone (IndexedDB) until the upload lands, so closing the page or losing signal doesn't lose photos: the next visit says "Finishing N photos from earlier" and sends them.
+   - **Save N to Photos** puts the car's new shots in the phone's photo library (share sheet), or downloads them on a computer.
 3. **Put these photos first** is ticked when the car has only stock/feed photos, so the first shot becomes the cover, in shooting order. Untick it to add photos after the existing ones.
-4. **Done, next car.** Uploads still running stay with the car they were taken for. Failed uploads retry by themselves (2s, 6s, 15s, 30s, and again when the phone comes back online), then offer **Try again**. Leaving the page with uploads pending asks first.
+4. **Arrange** lists every photo: ▲/▼ reorder, ★ makes a photo the cover, add a short caption, 🗑 deletes the photo and its file. Display order is never locked, before or after the car goes live.
+5. **Done, next car.** Uploads still running stay with the car they were taken for. Failed uploads retry by themselves (2s, 6s, 15s, 30s, and again when the phone comes back online), then offer **Try again**. Leaving the page with uploads pending asks first.
+
+**Who can change photos** (`0011_photo_workflow.sql`): only **photographers and admins** upload, caption, reorder or delete photos (`vp_can_edit_photos()`). Salespeople see photos read-only. The one exception: anyone on staff adding a car from a listing URL still brings that listing's photos (`source = 'import'`).
+
+**Merchandising audit.** Settings → **Photo standard** sets the minimum photos per car (6 by default). The vehicle list flags cars under it ("3/6 photos"), the Photos page counts toward it ("4 of 6 photos"), and the vehicle's Photos tab scores the car out of 100: photos against the minimum (70), share of photos with a caption (15), and a description of at least 100 characters (15), with the list of what's missing.
+
+**Photo banners** (Settings → **Photo banners**, `0012_vehicle_banners.sql`). An admin adds a banner (big text up to 40 characters, optional small line) for cars by **year range, make, model** and new/pre-owned; blank means "any", and make/model ignore case. It shows across the **bottom of the first photo** of every matching car on the vehicle page and inventory grid; the Lifetime Warranty banner keeps the top. If several rules match, the oldest wins. The card shows how many cars in stock each rule matches (and previews it as you type); rules can be turned off and on, or deleted. Shoppers can read only rules that are on; only admins can change them. Like the warranty banner it's a page overlay, not burned into the photo, so photos sent to other sites don't carry it.
 
 **Getting staff signed in.** Invites and sign-in links are one-time and expire. If one fails, the sign-in page now says why (it keeps Supabase's error from the link). Staff can tap *Email me a sign-in link*, and admins can use **Send sign-in link** next to anyone on the Staff page. Either way, the link opens *Your account* to set a password.
 
-**Photographer logins** (Staff → invite, role *Photographer*) only get the Photos page and their Account page. In the database (`0009_photographer.sql`), photographers aren't counted by `vp_is_member()`, so prices, leads, customers, messages, CHOMES, factory data and settings stay closed to them. They can read the dealership's vehicles, add `upload` photos as themselves, delete only their own photos, and upload files only to `<dealership>/vehicles/<vehicle>/<file>.jpg|png|webp|heic`. Everyone else on staff can use the Photos page too.
+**Photographer logins** (Staff → invite, role *Photographer*) only get the Photos page and their Account page. In the database (`0009_photographer.sql`), photographers aren't counted by `vp_is_member()`, so prices, leads, customers, messages, CHOMES, factory data and settings stay closed to them. They can read the dealership's vehicles, add `upload` photos as themselves, reorder, caption and delete any of the car's photos, and upload files only to `<dealership>/vehicles/<vehicle>/<file>.jpg|png|webp|heic`. Salespeople don't get the Photos page; admins do.
 
 **Printing on the lot.** Once a car is found, the Photos page has **🖨 Window sticker** and **🖨 Buyers Guide** (used/CPO) buttons; they open in a new tab so uploads keep going, and print from the phone (Share → Print / AirPrint). For photographers, the sticker page gets the car's customer-safe CHOMES facts through `vp_sticker_chomes()` (never recon cost, notes, demand note, inspector or provenance) and its tracked QR link through `vp_qr_share()` (`0010_photographer_print.sql`). They still can't read CHOMES or shares directly, and other admin pages (like the QR window card) stay closed to them.
 
@@ -163,10 +174,11 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
 
 ## Window stickers
 
-**Dealer window sticker** (`/admin/vehicles/<id>/sticker`, US Letter portrait; print at 100%). Built only from customer-safe data:
+**Dealer window sticker** (`/admin/vehicles/<id>/sticker`, US Letter portrait; print at 100%). Laid out like the SlipStream sticker it replaces (2023 Corvette 3LT reference): logo header, the title, a detail block (**Mileage, Engine, Stock #, Color, VIN, Transmission**), equipment in four columns, and the dealership website along the bottom. **Color / Black & white** switches the print for a mono printer (remembered per browser). Built only from customer-safe data:
 - **Price**, or a **pricing stack**: starting price (MSRP / Retail price), then discounts, rebates and add-ons, then your price. The database requires every rebate to say who qualifies. The stack prints **only while it adds up to the vehicle's current price**. If the price changes (say, the hourly feed), the stack stops printing and the tab shows a "!" until someone updates it, so a stale stack never reaches the window. The fees note and the dealership's sticker small print (Settings → Window stickers) print at the bottom. Keep running totals like "Final price: $X" out of fees notes; they go stale when the price changes.
 - **Highlights** and **options/packages** from CHOMES (falling back to the feed's features).
 - **Vehicle story** from CHOMES: age, miles per year vs. average, and owners/accidents/service/title with the report named. It prints only while no FTC consistency review is pending. History lines need a report provider. Recon cost, notes and the demand note are never read.
+- **Equipment: Standard, Exterior, Interior, Safety**, sorted from the car's factory data (VIN decoder) by group, through `vp_sticker_equipment()` so photographers can print it without seeing factory pricing. It's labelled "standard for this model and trim", because the decoder doesn't know the as-built options. The as-built packages and paint/trim lines (like the Corvette's "3LT Preferred Equipment Group") come from CHOMES options/packages, typed in or read off an uploaded factory sticker, and print in their own section. Without factory data the sticker says to run *Get factory data* first.
 - A **QR code** to the vehicle page, tracked like the QR window card.
 - Used/CPO: "Warranty: see the FTC Buyers Guide displayed on this vehicle". The sticker never states warranty terms. New: it's labelled a dealer sticker, and the Monroney label stays on the car.
 
@@ -197,6 +209,7 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    - `supabase/migrations/0008_warranty_program.sql` (dealer warranty program). On an existing install, run `supabase/run-2026-10-30c.sql`; also safe to run twice.
    - `supabase/migrations/0009_photographer.sql` (photographer logins). On an existing install, run `supabase/run-2026-10-30e.sql`; also safe to run twice.
    - `supabase/migrations/0010_photographer_print.sql` (photographers print stickers). On an existing install, run `supabase/run-2026-10-30f.sql`; also safe to run twice.
+   - `supabase/migrations/0011_photo_workflow.sql` (photo editing rules, captions, photo standard, sticker equipment lists) and `supabase/migrations/0012_vehicle_banners.sql` (photo banners). On an existing install, run `supabase/run-2026-10-30g.sql`, which is both; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -272,7 +285,7 @@ bash tests/sql/run.sh                  # 221 checks: RLS isolation between store
                                        #             Buyers Guide rules, CHOMES privacy/validation/provenance/FTC review, pricing stack rules, factory data privacy, warranty program, photographer role
 node --test tests/functions/*.test.js  # 85 tests (incl. CHOMES, pricing stack, sticker parsing, factory lookup, VinAudit decoding, warranty program): webhooks + signatures, STOP/START/HELP, routing, send gating, email identity,
                                        #           unsubscribe, Resend events, 10DLC runner, number purchase, reconcile, leads/ADF, feed
-node tests/e2e/run.mjs                 # 84 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide, CHOMES, window stickers, factory data, warranty program, photographer (phone), inbox, usage, settings, platform console
+node tests/e2e/run.mjs                 # 85 browser checks: portfolio, consent box, terms page, dashboard, Buyers Guide (letter), CHOMES, window stickers (equipment, B&W), factory data, warranty program, photo banners, photographer (phone), inbox, usage, settings, platform console
 ```
 
 All provider calls in the tests are simulated. **Before the first live dealership**, run one onboarding end to end and watch the registration log. The Twilio ISV API flow follows Twilio's documented steps, but it hasn't been run against a live account yet.

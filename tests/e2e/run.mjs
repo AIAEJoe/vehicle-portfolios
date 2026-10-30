@@ -107,6 +107,7 @@ const SEED = {
   shares: [{ id: 'sh1', code: 'MikeCode', vehicle_id: V, dealership_id: D, staff_id: S, customer_name: 'Mike Smith', customer_phone: '386-555-0100', channel: 'sms', open_count: 2, last_opened_at: new Date(Date.now() - 300000).toISOString(), created_at: new Date(Date.now() - 3600000).toISOString() }],
   portfolio_views: [{ id: 1, vehicle_id: V, dealership_id: D, share_id: 'sh1', visitor_id: 'a', user_agent: 'iPhone', viewed_at: new Date(Date.now() - 300000).toISOString() }],
   leads: [],
+  dealership_banners: [],
 };
 
 // ---- static server + mocks ----
@@ -212,6 +213,15 @@ async function setup(context) {
     if (method !== 'GET') return json(route, {}, 405);
     return route.fulfill({ contentType: 'text/html', body: indexHtml });
   });
+}
+
+// Pages in the PDF Chromium would print (letter, the page's own @page size).
+async function pdfPages(p) {
+  await p.emulateMedia({ media: null }); // print with the page's print styles, as a real printer would
+  const buf = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+  const sizes = [...buf.toString('latin1').matchAll(/\/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)/g)].map((m) => [Math.round(m[1]), Math.round(m[2])]);
+  if (sizes.some(([w, h]) => w !== 612 || h !== 792)) throw new Error('not letter: ' + JSON.stringify(sizes));
+  return sizes.length;
 }
 
 // ---- tiny test harness ----
@@ -481,8 +491,10 @@ console.log('Dashboard');
     assert((await p2.$$('.bg-side')).length === 2, 'front and back');
     await p2.emulateMedia({ media: 'print' });
     const w = await p2.$eval('.bg-front', (e) => e.getBoundingClientRect());
-    assert(w.width >= 7.25 * 96 - 1 && w.height >= 11 * 96 - 1, `print size ${w.width}x${w.height}`);
+    // Letter paper (8½" × 11", above the Rule's 7¼" × 11" minimum): the guide fills the printable area at 100%.
+    assert(w.width >= 7.25 * 96 - 1 && w.width <= 8 * 96 + 1 && w.height >= 10 * 96 && w.height <= 10.5 * 96 + 1, `print size ${w.width}x${w.height}`);
     assert(!(await p2.isVisible('#print')), 'toolbar hidden when printing');
+    assert(await pdfPages(p2) === 2, 'prints as exactly two letter pages: front and back');
     await p2.screenshot({ path: join(SHOTS, '05c-buyers-guide-print.png'), fullPage: true });
     await p2.close();
   });
@@ -624,7 +636,7 @@ console.log('Dashboard');
     await page.waitForSelector('.ws');
     const t = await page.textContent('.ws');
     for (const x of ['Pre-Owned', '2018 Jeep Wrangler Sport S', 'Retail price', '$19,995', 'Dealer discount', '−$1,500', 'Active duty and veterans', '+$299', '$18,294', 'You save $2,000',
-      'Removable hard top', 'Four Wheel Drive', 'see the FTC Buyers Guide displayed on this vehicle', 'Prices exclude tax, tag, title and dealer fees.', 'VIN 1C4GJXAG5JW150863'])
+      'Removable hard top', 'Four Wheel Drive', 'see the FTC Buyers Guide displayed on this vehicle', 'Prices exclude tax, tag, title and dealer fees.', 'VIN:1C4GJXAG5JW150863', 'Mileage:81,273', 'Stock #:R287418B', 'Transmission:8-Speed Automatic', 'Color:Black Clearcoat', 'www.newsmyrnachevy.com'])
       assert(t.includes(x), x);
     assert(!t.includes('Vehicle story') && !t.includes('CHOMES'), 'story held');
     assert((await page.textContent('main')).includes('until the FTC consistency review is cleared'), 'staff told why');
@@ -744,7 +756,21 @@ console.log('Dashboard');
     await page.goto(`${ORIGIN}/admin/vehicles/${T}/sticker`);
     await page.waitForSelector('.ws');
     const t = await page.textContent('.ws');
-    for (const x of ['Heated Steering Wheel', 'Remote Ignition', '28 city / 32 hwy', '1.2L I3']) assert(t.includes(x), x);
+    for (const x of ['Heated Steering Wheel', 'Remote Ignition', '28 city / 32 hwy', '1.2L I3', 'Equipment', 'standard for this model and trim',
+      'Standard', 'Exterior', 'Interior', 'Safety', 'Daytime Running Lights', 'Passenger Airbag', 'Tires: 225/55R18']) assert(t.includes(x), x);
+    assert((await page.$$('.ws-equip-col')).length === 4, 'four equipment lists');
+    assert(await pdfPages(page) === 1, 'sticker with full equipment lists prints on one letter page');
+    await page.click('[data-bw="1"]');
+    assert(await page.$('.ws.ws-bw'), 'black & white mode');
+    const head = await page.$eval('.ws-head', (e) => getComputedStyle(e).backgroundColor);
+    assert(head === 'rgb(255, 255, 255)', 'no colored header in black & white: ' + head);
+    await page.reload();
+    await page.waitForSelector('.ws');
+    assert(await page.$('.ws.ws-bw'), 'black & white is remembered');
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await page.screenshot({ path: join(SHOTS, '05i-sticker-bw-equipment.png'), fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.click('[data-bw="0"]');
     assert(!t.includes('22,500') && !t.includes('Invoice'), 'no factory pricing on the sticker');
     await page.evaluate((T) => { for (const k of ['vehicles']) window.__DB[k] = window.__DB[k].filter((x) => x.id !== T);
       window.__DB.vehicle_chomes = window.__DB.vehicle_chomes.filter((x) => x.vehicle_id !== T); window.__DB.shares = window.__DB.shares.filter((x) => x.vehicle_id !== T);
@@ -805,6 +831,7 @@ console.log('Dashboard');
       assert(g.includes(x), x);
     assert((g.match(/For as long as the original purchaser owns the vehicle/g) || []).length === 1, 'shared duration printed once');
     assert(!/power[\s-]*train/i.test(g), 'no powertrain shorthand on the guide');
+    assert(await pdfPages(p2) === 2, 'the longer lifetime-warranty guide still prints on two letter pages');
     await p2.screenshot({ path: join(SHOTS, '05h-buyers-guide-lifetime.png'), fullPage: true });
     await p2.goto(`${ORIGIN}/admin/vehicles/${V}/sticker`);
     await p2.waitForSelector('.ws-warranty');
@@ -1040,6 +1067,55 @@ console.log('Dashboard');
     assert(api.tracks.length === before, 'no track while signed in');
     assert(await page.isVisible('text=Vehicle history report'), 'document shows publicly');
     assert(await page.isVisible('text=Safety recalls'), 'recalls show publicly');
+  });
+  await step('photo banners: admin adds one by year, make and model; it shows on the first photo of matching cars only', async () => {
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.waitForSelector('#newbanner');
+    await page.waitForSelector('#newbanner');
+    await page.fill('#b-text', 'Jeep Days: 2.9% APR');
+    await page.fill('#b-note', 'On approved credit.');
+    await page.fill('#b-year_from', '2017'); await page.fill('#b-year_to', '2019');
+    await page.fill('#b-make', ' jeep '); await page.fill('#b-model', 'WRANGLER');
+    assert((await page.textContent('#b-preview')).includes('1 car in stock'), await page.textContent('#b-preview'));
+    await page.click('#newbanner button');
+    await page.waitForSelector('#toast >> text=Banner added');
+    await page.fill('#b-text', 'Silverado Event'); await page.fill('#b-make', 'Chevrolet'); await page.fill('#b-model', 'Silverado 1500');
+    await page.fill('#b-year_from', '2030'); await page.fill('#b-year_to', '2020');
+    await page.click('#newbanner button');
+    await page.waitForSelector('#toast >> text=is after');
+    await page.fill('#b-year_from', ''); await page.fill('#b-year_to', '');
+    await page.click('#newbanner button');
+    await page.waitForSelector('#toast >> text=Banner added');
+    const rows = (await db()).dealership_banners;
+    assert(rows.length === 2 && rows[0].make === 'jeep' && rows[0].year_from === 2017 && rows[0].active === true && rows[0].condition === 'any', JSON.stringify(rows[0]));
+    assert((await page.textContent('#banners')).includes('2017 to 2019 jeep WRANGLER'), 'rule described');
+    await page.screenshot({ path: join(SHOTS, '09b-photo-banners.png') });
+
+    await page.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await page.waitForSelector('#pbanner');
+    assert((await page.textContent('#pbanner')).includes('Jeep Days: 2.9% APR') && (await page.textContent('#pbanner')).includes('On approved credit.'), 'banner text');
+    assert(!(await page.textContent('#gal')).includes('Silverado Event'), 'non-matching rule not shown');
+    await page.click('#gal .nav.next');
+    assert(await page.isHidden('#pbanner'), 'only on the first photo');
+    await page.click('#gal .nav.prev');
+    assert(await page.isVisible('#pbanner'), 'back on the first photo');
+    await page.goto(`${ORIGIN}/`);
+    await page.waitForSelector('.inv-card');
+    const jeep = page.locator('.inv-card[href*="2018-jeep"] .pbanner');
+    assert((await jeep.count()) === 1 && (await jeep.textContent()).includes('Jeep Days'), 'grid banner');
+
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.click(`[data-toggle="${rows[0].id}"]`);
+    await page.waitForSelector('#toast >> text=Banner turned off');
+    await page.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await page.waitForSelector('h1.hero-title'); await page.waitForTimeout(200);
+    assert(!(await page.$('#pbanner')), 'switched off');
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.click(`[data-toggle="${rows[0].id}"]`);
+    await page.waitForSelector('#toast >> text=Banner turned on');
+    await page.click(`[data-delrule="${rows[1].id}"]`);
+    await page.waitForSelector('#toast >> text=Banner deleted');
+    assert((await db()).dealership_banners.length === 1, 'deleted');
   });
   await step('delete vehicle', async () => {
     const id = (await db()).vehicles.find((x) => x.vin === '1GNSKNKD1MR100001').id;
@@ -1321,7 +1397,7 @@ console.log('Photographer');
   await step('find a car by stock number (any case, with #) or the last 6 of the VIN', async () => {
     await page.fill('#stock', 'zz999');
     await page.click('#find button');
-    await page.waitForSelector('#find-msg >> text=No car in stock with "ZZ999"');
+    await page.waitForSelector('#find-msg >> text=No car in stock matches "ZZ999"');
     await page.fill('#stock', '150863');
     await page.click('#find button');
     await page.waitForSelector('.shoot-car >> text=2018 Jeep Wrangler Sport S');
@@ -1330,7 +1406,7 @@ console.log('Photographer');
     await page.click('#find button');
     await page.waitForSelector('.shoot-car');
     const t = await page.textContent('.shoot-car');
-    assert(t.includes('2018 Jeep Wrangler Sport S') && t.includes('R287418B') && t.includes('…JW150863') && t.includes('32 photos on file'), t);
+    assert(t.includes('2018 Jeep Wrangler Sport S') && t.includes('R287418B') && t.includes('…JW150863') && t.includes('32 of 6 photos ✓'), t);
     assert(await page.isChecked('#cover'), 'only stock photos on file, so new photos go first by default');
     assert((await page.getAttribute('#cam', 'capture')) === 'environment' && (await page.getAttribute('#cam', 'accept')) === 'image/*', 'opens the rear camera');
   });
@@ -1358,7 +1434,7 @@ console.log('Photographer');
     await page.fill('#stock', 'pj17152');
     await page.click('#find button');
     await page.waitForSelector('.shoot-car >> text=2025 Chevrolet Trax ACTIV');
-    assert((await page.textContent('.shoot-car')).includes('0 photos on file'), 'draft car with no photos is found');
+    assert((await page.textContent('.shoot-car')).includes('0 of 6 photos'), 'draft car with no photos is found');
     await page.setInputFiles('#cam', jpg(6));                 // the Trax's first photo
     await page.waitForSelector('.shoot-thumb.retrying, .shoot-thumb.done', { timeout: 5000 });
     await page.waitForSelector('.shoot-status >> text=All 6 photos uploaded', { timeout: 20000 });

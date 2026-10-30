@@ -126,3 +126,29 @@ export function textItemsToLines(items) {
   });
 }
 const COLUMN_GAP = 24; // PDF points (1/3 inch): wider than a word space, narrower than a column gutter
+
+
+// ---------- equipment lists for the sticker (from the VIN decoder's factory data) ----------
+// The decoder's groups are folded into the four lists dealers print: Standard, Exterior, Interior, Safety.
+const EQUIP_BUCKETS = [
+  ['Safety', /safety|brak|traction|anti-?theft|lock|airbag|security|stability|collision|assist/i],
+  ['Exterior', /exterior|lighting|mirror|window|wiper|wheel|tire|roof|glass|paint|body/i],
+  ['Interior', /interior|seat|climate|entertain|audio|communication|navigation|remote|instrument|comfort|convenience|storage|cargo/i],
+];
+/** factory equipment ({ features: [{group, items}], chassis: [{name, value}], optional }) → [[title, items[]] x4] */
+export function equipmentLists(eq) {
+  const out = { Standard: [], Exterior: [], Interior: [], Safety: [] };
+  if (!eq) return [];
+  for (const g of eq.features || []) {
+    const hit = EQUIP_BUCKETS.find(([, re]) => re.test(g.group));
+    out[hit ? hit[0] : 'Standard'].push(...(g.items || []));
+  }
+  for (const c of eq.chassis || []) {
+    const line = `${c.name}: ${c.value}`;
+    (/tire|wheel/i.test(c.name) ? out.Exterior : out.Standard).push(line);
+  }
+  for (const o of eq.optional || []) out.Standard.unshift(`${o.name} (option)`);
+  const seen = new Set();
+  return Object.entries(out).map(([k, items]) => [k, items.filter((x) => { const key = `${k}|${x.toLowerCase()}`; if (seen.has(key)) return false; seen.add(key); return true; })])
+    .filter(([, items]) => items.length);
+}

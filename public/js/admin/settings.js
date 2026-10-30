@@ -3,16 +3,25 @@ import { sb, html, mount, must, api, $, errMsg, toast, copyText, clearDealerCach
 import { adminPage, resetAdminContext } from './layout.js';
 import { resizeImage, uploadFile } from './media.js';
 import { warrantyProgramCard } from './warranty-program-card.js';
+import { bannerMatches, describeRule } from '../banners.js';
 
 export default async function settings(el) {
   const page = await adminPage(el, 'settings', { adminOnly: true });
   if (!page) return;
   const { ctx, main } = page;
   const D = ctx.dealership.id;
-  let d, s;
+  let d, s, rules = [], cars = [], rulesError = null;
   async function load() {
     d = must(await sb.from('dealerships').select('*').eq('id', D).single());
     s = must(await sb.from('dealership_settings').select('*').eq('dealership_id', D).single());
+    await loadRules();
+  }
+  async function loadRules() {
+    try {
+      rules = must(await sb.from('dealership_banners').select('*').eq('dealership_id', D).order('created_at'));
+      cars = must(await sb.from('vehicles').select('id,year,make,model,condition').eq('dealership_id', D).eq('status', 'published').limit(2000));
+      rulesError = null;
+    } catch (e) { rules = []; rulesError = errMsg(e); }
   }
   try { await load(); } catch (e) { mount(main, html`<div class="notice bad">${errMsg(e)}</div>`); return; }
 
@@ -71,6 +80,41 @@ export default async function settings(el) {
       <button class="btn" style="margin-top:12px">Save Buyers Guide settings</button>
     </form>
     <div id="wp"></div>
+
+    <form class="card" id="photostd"><h2>Photo standard</h2>
+      <div class="grid3"><div><label for="s-photo_min">Minimum photos per car</label><input id="s-photo_min" name="photo_min" type="number" min="1" max="100" value="${d.photo_min || 6}"></div></div>
+      <div class="hint">Cars below this are flagged in the vehicle list and score lower in the photo audit.</div>
+      <button class="btn" style="margin-top:12px">Save photo standard</button>
+    </form>
+
+    <div class="card" id="banners"><h2>Photo banners</h2>
+      <p class="hint" style="margin-top:0">A banner across the bottom of the first photo of every car that matches, on your website's vehicle pages and inventory. Leave year, make or model blank for "any". The Lifetime Warranty banner keeps the top of the photo.</p>
+      ${rulesError ? html`<div class="notice bad">Photo banners aren't set up yet (${rulesError}). Run the latest SQL update in Supabase.</div>` : html`
+      ${rules.length ? html`<ul class="banner-rules">${rules.map((r) => {
+        const n = cars.filter((c) => bannerMatches({ ...r, active: true }, c)).length;
+        return html`<li class="${r.active ? '' : 'off'}" data-rule="${r.id}"><div class="pbanner sm"><strong>${r.text}</strong>${r.note ? html`<span>${r.note}</span>` : ''}</div>
+          <div class="who"><strong>${describeRule(r)}</strong><div class="small sub">${n} car${n === 1 ? '' : 's'} in stock match${n === 1 ? 'es' : ''}${r.active ? '' : ' · switched off'}</div></div>
+          <button type="button" class="btn alt sm" data-toggle="${r.id}">${r.active ? 'Turn off' : 'Turn on'}</button>
+          <button type="button" class="btn ghost sm" data-delrule="${r.id}" aria-label="Delete banner">Delete</button></li>`;
+      })}</ul>` : html`<p class="sub small">No banners yet.</p>`}
+      <form id="newbanner">
+        <div class="grid2 stack-sm">
+          <div><label for="b-text">Banner text</label><input id="b-text" name="text" maxlength="40" required placeholder="0% APR FOR 72 MONTHS"></div>
+          <div><label for="b-note">Small line under it (optional)</label><input id="b-note" name="note" maxlength="80" placeholder="On approved credit. See dealer for details."></div>
+        </div>
+        <div class="grid3 stack-sm">
+          <div><label for="b-year_from">Year from</label><input id="b-year_from" name="year_from" type="number" min="1900" max="2100" placeholder="Any"></div>
+          <div><label for="b-year_to">Year to</label><input id="b-year_to" name="year_to" type="number" min="1900" max="2100" placeholder="Any"></div>
+          <div><label for="b-condition">New or used</label><select id="b-condition" name="condition"><option value="any">New and used</option><option value="new">New only</option><option value="used">Pre-owned only</option></select></div>
+          <div><label for="b-make">Make</label><input id="b-make" name="make" maxlength="40" placeholder="Any" list="b-makes"></div>
+          <div><label for="b-model">Model</label><input id="b-model" name="model" maxlength="60" placeholder="Any" list="b-models"></div>
+        </div>
+        <datalist id="b-makes">${[...new Set(cars.map((c) => c.make).filter(Boolean))].sort().map((x) => html`<option value="${x}">`)}</datalist>
+        <datalist id="b-models">${[...new Set(cars.map((c) => c.model).filter(Boolean))].sort().map((x) => html`<option value="${x}">`)}</datalist>
+        <div class="hint" id="b-preview"></div>
+        <button class="btn" style="margin-top:12px">Add banner</button>
+      </form>`}
+    </div>
 
     <form class="card" id="ws"><h2>Window stickers</h2>
       <label for="s-sticker_disclaimer">Small print at the bottom of every dealer window sticker</label>
@@ -131,6 +175,55 @@ export default async function settings(el) {
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
 
+    $('#photostd', main).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const n = Number(new FormData(e.target).get('photo_min'));
+      if (!(n >= 1 && n <= 100)) { toast('Enter a number from 1 to 100', 'bad'); return; }
+      try {
+        d = must(await sb.from('dealerships').update({ photo_min: n }).eq('id', D).select().single());
+        clearDealerCache(); resetAdminContext();
+        toast('Photo standard saved');
+        draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    });
+    const nb = $('#newbanner', main);
+    if (nb) {
+      const read = () => {
+        const fd = new FormData(nb);
+        const t = (k) => String(fd.get(k) || '').trim() || null;
+        const n = (k) => (t(k) ? Number(t(k)) : null);
+        return { text: t('text'), note: t('note'), make: t('make'), model: t('model'), year_from: n('year_from'), year_to: n('year_to'), condition: fd.get('condition') || 'any' };
+      };
+      const preview = () => {
+        const r = read();
+        const n = cars.filter((c) => bannerMatches({ ...r, active: true }, c)).length;
+        $('#b-preview', main).textContent = `Shows on ${describeRule(r)}: ${n} car${n === 1 ? '' : 's'} in stock right now.`;
+      };
+      nb.addEventListener('input', preview); preview();
+      nb.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const r = read();
+        if (!r.text) { toast('Enter the banner text', 'bad'); return; }
+        if (r.year_from && r.year_to && r.year_from > r.year_to) { toast('"Year from" is after "Year to"', 'bad'); return; }
+        try {
+          must(await sb.from('dealership_banners').insert({ ...r, active: true, dealership_id: D }).select().single());
+          await loadRules(); toast('Banner added'); draw();
+        } catch (err) { toast(errMsg(err), 'bad'); }
+      });
+    }
+    main.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', async () => {
+      const r = rules.find((x) => x.id === b.dataset.toggle);
+      try {
+        must(await sb.from('dealership_banners').update({ active: !r.active }).eq('id', r.id).select().single());
+        await loadRules(); toast(r.active ? 'Banner turned off' : 'Banner turned on'); draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    }));
+    main.querySelectorAll('[data-delrule]').forEach((b) => b.addEventListener('click', async () => {
+      try {
+        must(await sb.from('dealership_banners').delete().eq('id', b.dataset.delrule));
+        await loadRules(); toast('Banner deleted'); draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    }));
     $('#ws', main).addEventListener('submit', async (e) => {
       e.preventDefault();
       try {

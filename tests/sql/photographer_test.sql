@@ -32,8 +32,6 @@ select pg_temp.fails($$insert into vehicles (dealership_id, year) select id, 202
 
 insert into vehicle_photos (vehicle_id, dealership_id, url, storage_path, position, source)
 select id, dealership_id, 'https://x/p1.jpg', 'x', -10000, 'upload' from vehicles where stock_number = 'PJ17152';
-select pg_temp.fails($$insert into vehicle_photos (vehicle_id, dealership_id, url, position, source) select id, dealership_id, 'https://x/f.jpg', 0, 'feed' from vehicles where stock_number = 'PJ17152'$$,
-  'row-level security', 'photographer can only add uploads');
 select pg_temp.fails($$insert into vehicle_photos (vehicle_id, dealership_id, url, position, source, uploaded_by) select id, dealership_id, 'u', 0, 'upload', '00000000-0000-0000-0000-00000000000b' from vehicles where stock_number = 'PJ17152'$$,
   'row-level security', 'photographer cannot upload as someone else');
 -- storage paths
@@ -45,14 +43,30 @@ reset role;
 select pg_temp.check((select price is distinct from 1 from vehicles where stock_number = 'PJ17152'), 'photographer cannot change prices');
 select pg_temp.check((select uploaded_by from vehicle_photos where url = 'https://x/p1.jpg') = '00000000-0000-0000-0000-0000000000a1', 'uploader recorded');
 
--- deleting: own photos only
+-- photographers manage every photo (0011): reorder, caption, delete, including photos someone else uploaded
 insert into vehicle_photos (vehicle_id, url, position, source, uploaded_by) select id, 'https://x/staff.jpg', 1, 'upload', '00000000-0000-0000-0000-00000000000b' from vehicles where stock_number = 'PJ17152';
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
-delete from vehicle_photos where url in ('https://x/staff.jpg', 'https://x/p1.jpg');
+update vehicle_photos set position = -5, caption = 'Driver side' where url = 'https://x/staff.jpg';
+delete from vehicle_photos where url = 'https://x/p1.jpg';
 reset role;
-select pg_temp.check((select count(*) from vehicle_photos where url = 'https://x/staff.jpg') = 1 and (select count(*) from vehicle_photos where url = 'https://x/p1.jpg') = 0,
-  'photographer deletes only their own photos');
+select pg_temp.check((select position = -5 and caption = 'Driver side' from vehicle_photos where url = 'https://x/staff.jpg'), 'photographer reorders and captions any photo');
+select pg_temp.check((select count(*) from vehicle_photos where url = 'https://x/p1.jpg') = 0, 'photographer deletes photos');
+-- salespeople: view only
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+select pg_temp.check((select count(*) from vehicle_photos where url = 'https://x/staff.jpg') = 1, 'sales can see photos');
+update vehicle_photos set caption = 'hacked' where url = 'https://x/staff.jpg';
+delete from vehicle_photos where url = 'https://x/staff.jpg';
+select pg_temp.fails($$insert into vehicle_photos (vehicle_id, dealership_id, url, position, source, uploaded_by) select id, dealership_id, 'u', 0, 'upload', auth.uid() from vehicles where stock_number = 'PJ17152'$$,
+  'row-level security', 'sales cannot upload photos');
+insert into vehicle_photos (vehicle_id, dealership_id, url, position, source) select id, dealership_id, 'https://x/import.jpg', 9, 'import' from vehicles where stock_number = 'PJ17152';
+reset role;
+select pg_temp.check((select caption = 'Driver side' from vehicle_photos where url = 'https://x/staff.jpg'), 'sales cannot caption or delete photos');
+select pg_temp.check((select count(*) from vehicle_photos where url = 'https://x/import.jpg') = 1, 'sales can still bring listing photos when adding a vehicle');
+select pg_temp.fails($$update vehicle_photos set caption = repeat('x', 201) where url = 'https://x/staff.jpg'$$, 'check constraint', 'captions are short');
+select pg_temp.check((select photo_min from dealerships where slug = 'nsbchevy') = 6, 'photo standard defaults to 6');
+select pg_temp.fails($$update dealerships set photo_min = 0 where slug = 'nsbchevy'$$, 'check constraint', 'minimum is at least 1');
 
 -- other dealership's photographer sees nothing here; staff still work as before
 set role authenticated;

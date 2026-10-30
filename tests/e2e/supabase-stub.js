@@ -232,6 +232,10 @@ export function createClient() {
         return { data: db.dealerships.map((d) => { const p = db.messaging_profiles.find((x) => x.dealership_id === d.id) || {}; const b = db.dealership_billing.find((x) => x.dealership_id === d.id) || {};
           return { id: d.id, slug: d.slug, name: d.name, a2p_status: p.a2p_status, sms_enabled: p.sms_enabled, phone: p.twilio_phone_number, email_domain: p.email_domain, email_domain_status: p.email_domain_status, billing_status: b.status, usage: usageSummary(d.id, true) }; }), error: null };
       }
+      if (fn === 'vp_sticker_equipment') {
+        const f = db.vehicle_factory_data.find((x) => x.vehicle_id === args.p_vehicle_id);
+        return { data: f ? { features: f.data.features, optional: f.data.optional, chassis: f.data.chassis, as_built: f.data.as_built } : null, error: null };
+      }
       if (fn === 'vp_sticker_chomes') {
         const c = db.vehicle_chomes.find((x) => x.vehicle_id === args.p_vehicle_id);
         if (!c) return { data: null, error: null };
