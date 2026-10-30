@@ -27,6 +27,7 @@ export default async function settings(el) {
 
   function draw() {
     const ingestUrl = `${location.origin}/api/inventory/ingest?token=${s.feed_ingest_token}`;
+    const photoFeedUrl = `${location.origin}/api/feeds/photos?token=${s.photo_feed_token}`;
     const r = s.feed_last_result;
     const field = (obj, name, label, type = 'text', hint = '', ph = '') => html`<div><label for="s-${name}">${label}</label>
       <input id="s-${name}" name="${name}" type="${type}" value="${obj[name] ?? ''}" placeholder="${ph}">${hint ? html`<div class="hint">${hint}</div>` : ''}</div>`;
@@ -116,6 +117,13 @@ export default async function settings(el) {
       </form>`}
     </div>
 
+    <div class="card" id="photofeed"><h2>Photo feed for third-party sites</h2>
+      ${s.photo_feed_token ? html`<p class="hint" style="margin-top:0">Give this link to HomeNet (or vAuto / Dealer Inspire) as your photo source, in place of SlipStream. It lists every live car your photographer has shot, with its photos in your display order (cover first), and updates as soon as photos are added, moved or deleted. Stock and feed photos aren't included.</p>
+      <div class="copy-field"><input readonly value="${photoFeedUrl}" aria-label="Photo feed URL"><button type="button" class="btn alt sm" id="copy-photofeed">Copy</button></div>
+      <p class="small sub">CSV columns: VIN, StockNumber, Year, Make, Model, Trim, Type, PhotoCount, PhotosUpdated, PhotoURLs (comma-separated, like HomeNet's ImageList). Add <code>&amp;sep=pipe</code> for "|" between photos or <code>&amp;format=json</code> for JSON. <a href="${photoFeedUrl}" target="_blank" rel="noopener">Open the feed</a>. Keep the link private: anyone with it can download your photo list.</p>`
+        : html`<div class="notice bad">The photo feed isn't set up yet. Run the latest SQL update in Supabase.</div>`}
+    </div>
+
     <form class="card" id="ws"><h2>Window stickers</h2>
       <label for="s-sticker_disclaimer">Small print at the bottom of every dealer window sticker</label>
       <textarea id="s-sticker_disclaimer" name="sticker_disclaimer" rows="3" placeholder="Prices exclude tax, tag, title and dealer fees. Rebates subject to change; see dealer for details.">${d.sticker_disclaimer || ''}</textarea>
@@ -156,6 +164,7 @@ export default async function settings(el) {
     </div>`);
 
     $('#copy-ingest', main).onclick = () => copyText(ingestUrl);
+    if ($('#copy-photofeed', main)) $('#copy-photofeed', main).onclick = () => copyText(photoFeedUrl);
 
     $('#profile', main).addEventListener('submit', async (e) => {
       e.preventDefault();

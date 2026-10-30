@@ -74,7 +74,7 @@ const SEED = {
     website: 'https://www.newsmyrnachevy.com', address_line: '2375 State Road 44', city: 'New Smyrna Beach', state: 'FL', zip: '32168',
     hours: 'Mon to Sat 9am to 8pm, Sun 11am to 6pm', logo_url: '/seed/nsb-logo.png', brand_primary: '#013C9E', brand_accent: '#F4BC00',
     default_fees_note: 'Plus $399 computerized vehicle registration fee and $998 documentation fee.' }],
-  dealership_settings: [{ dealership_id: D, notify_on_open: true, open_alert_cooldown_minutes: 60, feed_auto_publish: true, feed_mark_missing_sold: true, feed_ingest_token: 'tok123', lead_email: null, crm_adf_email: null }],
+  dealership_settings: [{ dealership_id: D, notify_on_open: true, open_alert_cooldown_minutes: 60, feed_auto_publish: true, feed_mark_missing_sold: true, feed_ingest_token: 'tok123', photo_feed_token: 'pftok456', lead_email: null, crm_adf_email: null }],
   dealership_members: [{ dealership_id: D, user_id: OWNER, role: 'owner', created_at: '2026-10-01T00:00:00Z' }, { dealership_id: D, user_id: SALES, role: 'sales', created_at: '2026-10-02T00:00:00Z' },
     { dealership_id: D, user_id: PHOTO, role: 'photographer', created_at: '2026-10-30T00:00:00Z' }],
   dealership_billing: [{ dealership_id: D, plan_name: 'Vehicle Portfolios', monthly_fee: 995, included_sms_segments: 2500, included_emails: 5000, overage_sms_rate: 0.04, overage_email_rate: 0.005, pass_through_fixed_fees: false, allow_overage: true, status: 'active', billing_email: null, notes: null }],
@@ -1070,6 +1070,7 @@ console.log('Dashboard');
     const s = (await db()).dealership_settings[0];
     assert(s.crm_adf_email === 'nsbchevy@eleadtrack.net' && s.feed_url === 'https://feeds.homenet.test/nsb.csv' && s.notify_on_open === true, JSON.stringify(s));
     assert((await page.inputValue('input[aria-label="Ingest URL"]')).endsWith('/api/inventory/ingest?token=tok123'), 'ingest url');
+    assert((await page.inputValue('input[aria-label="Photo feed URL"]')).endsWith('/api/feeds/photos?token=pftok456'), 'photo feed url');
     await page.click('#sync');
     await page.waitForSelector('text=Feed synced: 4 added');
     await page.setInputFiles('#upload input[type=file]', { name: 'feed.csv', mimeType: 'text/csv', buffer: Buffer.from('VIN,Stock\n1C4GJXAG5JW150863,R1\n') });
