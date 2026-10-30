@@ -7,14 +7,18 @@ import { vehicleBanner, loadBanners } from '../banners.js';
 export default async function home(el) {
   mount(el, loadingView());
   let d, vehicles, rules = [];
+  const mediaByCar = {};
   try {
     d = await loadDealership();
     const rulesP = loadBanners(d.id);
+    const mediaP = sb.from('vehicle_media').select('vehicle_id,kind').eq('dealership_id', d.id).limit(3000)
+      .then(({ data }) => data || [], () => []); // optional: video/360 badges
     vehicles = must(await sb.from('vehicles')
       .select('id,slug,year,make,model,trim,price,mileage,condition,exterior_color,stock_number,bg_warranty,bg_program,vehicle_photos(url,position)')
       .eq('dealership_id', d.id).eq('status', 'published')
       .order('updated_at', { ascending: false }).limit(500));
     rules = await rulesP;
+    for (const m of await mediaP) (mediaByCar[m.vehicle_id] ||= new Set()).add(m.kind);
   } catch (e) {
     mount(el, html`<div class="loading">${errMsg(e)}</div>`);
     return;
@@ -27,6 +31,7 @@ export default async function home(el) {
       <div class="inv-photo">${photo ? html`<img src="${photo.url}" alt="${vTitle(v)}" loading="lazy">` : html`<div class="noimg"></div>`}
       ${(() => { const b = v.condition !== 'new' && programBanner(v, d.bg_program); return b ? html`<div class="wbanner sm"><strong>${b.text}</strong>${b.note ? html`<span>${b.note}</span>` : ''}</div>` : ''; })()}
       ${(() => { const b = vehicleBanner(v, rules); return b ? html`<div class="pbanner sm"><strong>${b.text}</strong>${b.note ? html`<span>${b.note}</span>` : ''}</div>` : ''; })()}</div>
+      ${mediaByCar[v.id] ? html`<div class="inv-media">${[...mediaByCar[v.id]].sort().map((k) => html`<span>${{ spin: '360°', interior360: '360° interior', video: '▶ Video' }[k]}</span>`)}</div>` : ''}
       <div class="body">
         <div class="sub small">${conditionLabel(v.condition)}${v.stock_number ? ` · Stock ${v.stock_number}` : ''}</div>
         <h3>${vTitle(v)}</h3>

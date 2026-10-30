@@ -11,6 +11,7 @@ import { chomesTab, chomesBadge, loadChomes } from './chomes-tab.js';
 import { stickerTab, stickerBadge } from './sticker-tab.js';
 import { programStatus } from '../warranty-program.js';
 import { auditPhotos, DEFAULT_PHOTO_MIN } from '../photo-audit.js';
+import { openMedia, MEDIA_LABEL } from '../media-viewers.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -213,7 +214,19 @@ export default async function vehicleEdit(el, { id }) {
     const a = auditPhotos(v, list, ctx.dealership.photo_min || DEFAULT_PHOTO_MIN);
     const audit = html`<div class="card audit"><div class="audit-score ${a.score >= 85 ? 'ok' : a.score >= 60 ? 'mid' : 'low'}"><b>${a.score}</b><span>/100</span></div>
       <div><strong>Photo audit</strong> · ${a.count} of ${a.min} photos${a.meetsMinimum ? ' ✓' : ''} · ${a.captioned} captioned
-        ${a.issues.length ? html`<ul class="audit-issues">${a.issues.map((i) => html`<li>${i}</li>`)}</ul>` : html`<p class="small" style="margin:4px 0 0;color:var(--ok)">Meets the photo standard.</p>`}</div></div>`;
+        ${a.issues.length ? html`<ul class="audit-issues">${a.issues.map((i) => html`<li>${i}</li>`)}</ul>` : html`<p class="small" style="margin:4px 0 0;color:var(--ok)">Meets the photo standard.</p>`}</div></div>
+      <div id="vmedia"></div>`;
+    // Video & 360° summary (they're shot and managed on the Photos page).
+    sb.from('vehicle_media').select('*').eq('vehicle_id', v.id).order('created_at', { ascending: false }).then(({ data, error }) => {
+      const el = box.querySelector('#vmedia');
+      if (!el || error) return;
+      const rows = data || [];
+      const one = (k) => rows.find((m) => m.kind === k);
+      mount(el, html`<div class="card vmedia"><strong>Video &amp; 360°</strong>
+        ${['spin', 'interior360', 'video'].map((k) => one(k) ? html`<button type="button" class="btn alt sm" data-vm="${one(k).id}">${MEDIA_LABEL[k]} ✓</button>` : html`<span class="small sub">${MEDIA_LABEL[k]}: none</span>`)}
+        ${ctx.isAdmin || ctx.isPhotographer ? html`<a class="small" href="/admin/shoot">Add or replace on the Photos page</a>` : ''}</div>`);
+      el.querySelectorAll('[data-vm]').forEach((b) => b.addEventListener('click', () => openMedia(rows.find((m) => m.id === b.dataset.vm), vTitle(v))));
+    }, () => {});
     if (!canEdit) {
       mount(box, html`${audit}<p class="notice">Only photographers and admins can add, reorder or delete photos.</p>
         ${list.length ? html`<div class="photo-grid">${list.map((p, i) => html`<div class="photo-tile">${i === 0 ? html`<span class="cover">Cover</span>` : ''}

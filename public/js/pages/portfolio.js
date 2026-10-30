@@ -6,6 +6,7 @@ import {
 import { siteHeader, siteFooter } from './site.js';
 import { programBanner } from '../warranty-program.js';
 import { vehicleBanner, loadBanners } from '../banners.js';
+import { pickMedia, openMedia, mediaThumb, MEDIA_LABEL, MEDIA_ICON } from '../media-viewers.js';
 import { renderBuyersGuide, needsBuyersGuide } from '../buyers-guide.js';
 
 const DOC_LABELS = {
@@ -20,7 +21,7 @@ const DOC_LABELS = {
 export default async function portfolio(el, { slug }) {
   mount(el, loadingView());
   const shareCode = new URLSearchParams(location.search).get('s');
-  let d, v, share = null, staff = null, smsInfo = null, rules = [];
+  let d, v, share = null, staff = null, smsInfo = null, rules = [], media = [];
   try {
     d = await loadDealership();
     v = must(await sb.from('vehicles')
@@ -29,6 +30,8 @@ export default async function portfolio(el, { slug }) {
     if (!v) throw new Error('This vehicle portfolio is not available. It may have been removed.');
     const smsP = sb.rpc('vp_public_sms_info', { p_slug: d.slug });
     const rulesP = loadBanners(d.id);
+    const mediaP = sb.from('vehicle_media').select('id,kind,url,poster_url,frames,duration_seconds,position,created_at').eq('vehicle_id', v.id)
+      .then(({ data }) => data || [], () => []); // never break the page if video/360 isn't set up
     if (shareCode) {
       const { data } = await sb.rpc('vp_share_public', { p_code: shareCode });
       if (data && data.vehicle_id === v.id) share = data;
@@ -36,6 +39,7 @@ export default async function portfolio(el, { slug }) {
     const staffId = (share && share.staff_id) || v.salesperson_id;
     smsInfo = (await smsP).data;
     rules = await rulesP;
+    media = pickMedia(await mediaP);
     if (staffId) {
       const { data } = await sb.from('staff').select('id,full_name,title,phone,email,photo_url').eq('id', staffId).maybeSingle();
       staff = data;
@@ -92,6 +96,8 @@ export default async function portfolio(el, { slug }) {
         <button class="nav next" data-step="1" aria-label="Next photo">›</button>` : ''}
         <span class="count" id="gal-count">1 / ${photos.length}</span>
       </div>
+      ${media.length ? html`<div class="media-bar" id="media-bar">${media.map((m) => html`<button type="button" class="media-btn" data-media="${m.id}">
+        ${mediaThumb(m) ? html`<img src="${mediaThumb(m)}" alt="" loading="lazy">` : ''}<span class="media-ico" aria-hidden="true">${MEDIA_ICON[m.kind]}</span><span class="media-lbl">${MEDIA_LABEL[m.kind]}</span></button>`)}</div>` : ''}
       ${photos.length > 1 ? html`<div class="thumbs" id="thumbs">${photos.map((p, i) => html`<button data-i="${i}" class="${i === 0 ? 'on' : ''}" aria-label="Photo ${i + 1}"><img src="${p.url}" alt="" loading="lazy"></button>`)}</div>` : ''}
       ` : ''}
       <div style="margin-top:14px">
@@ -204,6 +210,7 @@ export default async function portfolio(el, { slug }) {
   on(el, 'click', '#gal .nav', (e, b) => { e.stopPropagation(); show(idx + Number(b.dataset.step)); });
   on(el, 'click', '#thumbs button', (e, b) => show(Number(b.dataset.i)));
   on(el, 'click', '#gal-img', () => openLightbox(photos, idx, title, (i) => show(i)));
+  on(el, 'click', '#media-bar [data-media]', (e, b) => { const m = media.find((x) => x.id === b.dataset.media); if (m) openMedia(m, title); });
   swipe($('#gal', el), (dir) => show(idx + dir));
 
   on(el, 'click', '[data-bg-lang]', (e, b) => {

@@ -4,6 +4,7 @@
 // 2. Shoot: "Series camera" (in-app, 3×3 grid, keep tapping) or "Phone camera" (the phone's own camera, best for
 //    hero shots) or "Camera roll". Each photo uploads to that car in the background.
 // 3. Arrange: reorder, make cover, caption or delete any photo of the car, right on the phone.
+// 3b. Video & 360°: walkaround video, exterior spin, interior 360 photo (shoot-media.js).
 // 4. Print the window sticker / Buyers Guide, "Save to Photos", "Done, next car".
 //
 // Every photo is tied to the car on screen when it was taken. A copy stays on the phone until it has uploaded,
@@ -14,6 +15,7 @@ import { resizeImage, uploadFile, removeFile } from './media.js';
 import { openCamera, cameraSupported } from './camera.js';
 import { savePending, removePending, listPending, saveToDevice } from './photo-store.js';
 import { auditPhotos, DEFAULT_PHOTO_MIN } from '../photo-audit.js';
+import { mediaSection } from './shoot-media.js';
 
 const RETRY_DELAYS = [2000, 6000, 15000, 30000];
 const CONCURRENCY = 2;
@@ -49,11 +51,13 @@ export default async function shoot(el, params, token = {}) {
       <div id="find-msg"></div>
     </form>
     <div id="car"></div>
+    <div id="media"></div>
     <div id="manage"></div>
     <div id="queue"></div>
   </div>`);
   const input = $('#stock', main);
   input.focus();
+  const media = mediaSection({ box: $('#media', main), ctx, D });
 
   // ---------- find the car ----------
   $('#find', main).addEventListener('submit', async (e) => {
@@ -74,6 +78,7 @@ export default async function shoot(el, params, token = {}) {
       if (found.length === 1) pick(found[0]);
       else {
         mount($('#manage', main), '');
+        media.show(null);
         mount($('#car', main), html`<div class="card"><h2>${found.length} cars match "${term}"</h2>${found.map((v) => html`<button type="button" class="shoot-pick" data-pick="${v.id}">
           <strong>${vTitle(v)}</strong><span>Stock ${v.stock_number || '–'} · VIN ${vinMarked(v.vin, term)}${v.exterior_color ? ` · ${v.exterior_color}` : ''}</span></button>`)}</div>`);
         on($('#car', main), 'click', '[data-pick]', (ev, b) => pick(found.find((v) => v.id === b.dataset.pick)));
@@ -87,6 +92,7 @@ export default async function shoot(el, params, token = {}) {
     bounds();
     drawCar();
     drawManage();
+    media.show(v);
     input.value = '';
     input.blur();
   }
@@ -148,7 +154,7 @@ export default async function shoot(el, params, token = {}) {
       const r = await saveToDevice(car.session);
       if (r === 'shared' || r === 'downloaded') toast(r === 'shared' ? 'Choose "Save Images" to keep them in Photos' : 'Photos downloaded');
     });
-    $('#next', main).addEventListener('click', () => { car = null; drawCar(); input.focus(); window.scrollTo(0, 0); });
+    $('#next', main).addEventListener('click', () => { car = null; drawCar(); media.show(null); input.focus(); window.scrollTo(0, 0); });
   }
 
   // ---------- arrange: reorder, cover, caption, delete ----------
@@ -299,7 +305,7 @@ export default async function shoot(el, params, token = {}) {
   }).catch(() => {});
 
   window.addEventListener('online', () => { queue.filter((q) => q.status === 'retrying' || q.status === 'failed').forEach((q) => { q.status = 'waiting'; }); pump(); });
-  const warn = (e) => { if (queue.some((q) => !['done', 'failed'].includes(q.status))) { e.preventDefault(); e.returnValue = ''; } };
+  const warn = (e) => { if (queue.some((q) => !['done', 'failed'].includes(q.status)) || media.pending()) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', warn);
   // Uploads keep going if the photographer opens another page in the app; only the leave-page warning is removed.
   token.cleanup = () => window.removeEventListener('beforeunload', warn);

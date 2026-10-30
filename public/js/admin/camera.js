@@ -6,11 +6,14 @@
 // without it (iPhone Safari) take the frame from the camera's video stream, asking for the highest resolution the
 // phone allows (usually 4K). That is sharp, but skips the phone's own photo processing; the Photos page keeps a
 // "Phone camera" button for hero shots.
+//
+// Spin mode (limit + ghost): for an exterior 360° spin. It stops after `limit` frames, shows the previous frame as a
+// faint overlay so each shot lines up with the last, and the first frame near the end so the circle closes.
 import { html, mount } from '../core.js';
 
 export const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
-export function openCamera({ onPhoto, onClose, label = '' }) {
+export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = false, hint = '' }) {
   const box = document.createElement('div');
   box.className = 'cam';
   box.setAttribute('role', 'dialog');
@@ -18,14 +21,15 @@ export function openCamera({ onPhoto, onClose, label = '' }) {
   document.body.appendChild(box);
   document.body.classList.add('cam-open');
   mount(box, html`<div class="cam-stage"><video playsinline muted autoplay></video>
-      <div class="cam-frame"><div class="cam-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div>
+      <div class="cam-frame">${ghost ? html`<img class="cam-ghost" alt="" hidden>` : ''}<div class="cam-grid" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div>
+      ${hint ? html`<div class="cam-hint">${hint}</div>` : ''}
       <div class="cam-flash"></div><div class="cam-msg" role="status" aria-live="polite">Starting camera…</div></div>
     <div class="cam-bar">
       <button type="button" class="cam-grid-toggle" aria-pressed="true" title="Grid">#</button>
       <button type="button" class="cam-shutter" aria-label="Take photo" disabled></button>
       <button type="button" class="cam-done">Done</button>
     </div>
-    <div class="cam-top"><span class="cam-label">${label}</span><span class="cam-count" aria-live="polite">0 photos</span><img class="cam-last" alt="" hidden></div>`);
+    <div class="cam-top"><span class="cam-label">${label}</span><span class="cam-count" aria-live="polite">${limit ? `Frame 1 of ${limit}` : '0 photos'}</span><img class="cam-last" alt="" hidden></div>`);
 
   const video = box.querySelector('video');
   const frame = box.querySelector('.cam-frame');
@@ -33,6 +37,8 @@ export function openCamera({ onPhoto, onClose, label = '' }) {
   const shutter = box.querySelector('.cam-shutter');
   const countEl = box.querySelector('.cam-count');
   const last = box.querySelector('.cam-last');
+  const ghostImg = box.querySelector('.cam-ghost');
+  let firstUrl = null;
   let stream = null;
   let imageCapture = null;
   let count = 0;
@@ -92,11 +98,18 @@ export function openCamera({ onPhoto, onClose, label = '' }) {
       if (blob) {
         count++;
         const file = new File([blob], `IMG_${Date.now()}_${count}.jpg`, { type: blob.type || 'image/jpeg' });
-        countEl.textContent = `${count} photo${count === 1 ? '' : 's'}`;
-        if (last.src) URL.revokeObjectURL(last.src);
+        countEl.textContent = limit ? `Frame ${Math.min(count + 1, limit)} of ${limit}` : `${count} photo${count === 1 ? '' : 's'}`;
+        if (last.src && last.src !== firstUrl) URL.revokeObjectURL(last.src);
         last.src = URL.createObjectURL(file);
         last.hidden = false;
+        if (count === 1) firstUrl = last.src;
+        if (ghostImg) {
+          // line up with the frame just taken; for the last few, with the first one so the spin closes the circle
+          ghostImg.src = limit && count >= limit - 3 && firstUrl ? firstUrl : last.src;
+          ghostImg.hidden = false;
+        }
         onPhoto(file);
+        if (limit && count >= limit) { setTimeout(close, 250); }
       }
     } finally { busy = false; }
   });
@@ -112,6 +125,7 @@ export function openCamera({ onPhoto, onClose, label = '' }) {
     window.removeEventListener('orientationchange', fit);
     document.body.classList.remove('cam-open');
     if (last.src) URL.revokeObjectURL(last.src);
+    if (firstUrl && firstUrl !== last.src) URL.revokeObjectURL(firstUrl);
     box.remove();
     onClose && onClose(count);
   };

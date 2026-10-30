@@ -108,6 +108,7 @@ const SEED = {
   portfolio_views: [{ id: 1, vehicle_id: V, dealership_id: D, share_id: 'sh1', visitor_id: 'a', user_agent: 'iPhone', viewed_at: new Date(Date.now() - 300000).toISOString() }],
   leads: [],
   dealership_banners: [],
+  vehicle_media: [],
 };
 
 // ---- static server + mocks ----
@@ -131,6 +132,9 @@ async function setup(context) {
   await context.route('https://cdn.jsdelivr.net/npm/@supabase/**', (r) => r.fulfill({ contentType: 'text/javascript', body: stub }));
   await context.route('https://cdn.jsdelivr.net/npm/qrcode-generator**', (r) => r.fulfill({ contentType: 'text/javascript', body: qrStub }));
   await context.route('https://maps.google.com/**', (r) => r.abort());
+  await context.route('https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css', (r) => r.fulfill({ contentType: 'text/css', body: '.pnlm-stub{height:100%}' }));
+  await context.route('https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js', (r) => r.fulfill({ contentType: 'text/javascript',
+    body: 'window.pannellum={viewer:function(el,c){el.innerHTML="<div class=pnlm-stub data-pano=\\""+c.panorama+"\\" data-type=\\""+c.type+"\\"></div>";window.__PANO=c;return{destroy:function(){window.__PANO_DESTROYED=1}}}};' }));
   await context.route('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/*', (r) => r.fulfill({ contentType: 'text/javascript', body: readFileSync(join(PDFJS_DIR, new URL(r.request().url()).pathname.split('/').pop())) }));
   // A Dealer Inspire page like the real site: lazy-loaded gallery, photos named by VIN, "similar vehicles" with other VINs
 
@@ -1487,6 +1491,81 @@ console.log('Photographer');
     await page.goto(`${ORIGIN}/admin/vehicles/${V}/print`);
     await page.waitForSelector('#stock');
     assert(new URL(page.url()).pathname === '/admin/shoot', 'other admin print pages stay closed');
+  });
+  await step('video & 360: interior 360 photo, spin from the roll, walkaround video; customers can open each', async () => {
+    const img = async (w, h, name) => ({ name, mimeType: 'image/jpeg', buffer: Buffer.from(await page.evaluate(([w, h]) => {
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+      g.fillStyle = `hsl(${(w * 7 + h) % 360},60%,50%)`; g.fillRect(0, 0, w, h); return c.toDataURL('image/jpeg', 0.5).split(',')[1]; }, [w, h]), 'base64') });
+    await page.fill('#stock', 'R287418B');
+    await page.click('#find button');
+    await page.waitForSelector('.shoot-media >> text=Video & 360°');
+    assert((await page.textContent('.shoot-media')).includes('None yet'), 'nothing yet');
+    // not a 360 photo
+    await page.setInputFiles('[data-pano]', await img(1200, 900, 'IMG_1.jpg'));
+    await page.waitForSelector('#toast >> text=isn\'t a 360° photo');
+    assert(!(await db()).vehicle_media.length, 'rejected');
+    // interior 360 (2:1), then replaced by a second one
+    await page.setInputFiles('[data-pano]', await img(2400, 1200, 'R0010001.JPG'));
+    await page.waitForSelector('.sm-jobs >> text=360° interior photo: ✓ uploaded');
+    await page.setInputFiles('[data-pano]', await img(2400, 1200, 'R0010002.JPG'));
+    await page.waitForFunction(() => window.__DB.vehicle_media.filter((m) => m.kind === 'interior360').length === 1 && window.__DB.vehicle_media.length === 1 && document.querySelectorAll('.sm-jobs li.done').length === 2);
+    // too few for a spin, then a 10-photo spin from the camera roll, kept in file order
+    await page.setInputFiles('[data-spin-roll]', await Promise.all([1, 2, 3].map((i) => img(640, 480, `S${i}.jpg`))));
+    await page.waitForSelector('#toast >> text=at least 8 photos');
+    await page.setInputFiles('[data-spin-roll]', await Promise.all([10, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => img(640 + i, 480, `SPIN_${i}.jpg`))));
+    await page.waitForSelector('.sm-jobs >> text=360° spin (10 photos): ✓ uploaded', { timeout: 20000 });
+    // a walkaround video from the roll (this one can't be decoded, so no poster; it still uploads)
+    await page.setInputFiles('[data-video-roll]', { name: 'IMG_0420.MOV', mimeType: 'video/quicktime', buffer: Buffer.alloc(4096, 1) });
+    await page.waitForSelector('.sm-jobs >> text=Walkaround video: ✓ uploaded', { timeout: 20000 });
+    const m = (await db()).vehicle_media;
+    const spin = m.find((x) => x.kind === 'spin');
+    assert(m.length === 3 && spin.frames.length === 10 && spin.poster_url === spin.frames[0].url && m.every((x) => x.vehicle_id === V && x.uploaded_by === PHOTO), JSON.stringify(m).slice(0, 300));
+    const ups = await page.evaluate(() => window.__UPLOADS.map((u) => u.path));
+    assert(ups.some((p) => p.endsWith('.mov') && p.includes(`/vehicles/${V}/`)), 'video stored in the car folder: ' + ups.slice(-3).join());
+    assert((await page.textContent('.shoot-media')).includes('10 frames'), 'spin shown');
+    await page.screenshot({ path: join(SHOTS, '19-video-360-photos-page.png'), fullPage: true });
+    // a big camera-roll video is refused before uploading
+    await page.setInputFiles('[data-video-roll]', { name: 'BIG.MOV', mimeType: 'video/quicktime', buffer: Buffer.alloc(46 * 1024 * 1024, 1) });
+    await page.waitForSelector('#toast >> text=The limit is 45 MB');
+
+    // customer page
+    const cust = await context.newPage();
+    await cust.goto(`${ORIGIN}/v/2018-jeep-wrangler-sport-s-r287418b`);
+    await cust.waitForSelector('#media-bar');
+    const labels = await cust.$$eval('#media-bar .media-lbl', (e) => e.map((x) => x.textContent));
+    assert(JSON.stringify(labels) === '["360° exterior","360° interior","Walkaround video"]', labels.join());
+    await cust.click('#media-bar [data-media]:has-text("360° exterior")');
+    await cust.waitForSelector('.spin-img');
+    await cust.waitForSelector('.spin.ready');
+    const box = await cust.$eval('.spin', (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+    await cust.mouse.move(box.x + box.w / 2, box.y + box.h / 2); await cust.mouse.down();
+    await cust.mouse.move(box.x + box.w / 2 - 120, box.y + box.h / 2, { steps: 6 }); await cust.mouse.up();
+    assert(!(await cust.textContent('.spin-n')).startsWith('1 /'), 'drag turns the car');
+    await cust.click('.spin-ctrl [data-step="1"]');
+    assert(/\d+ \/ 10/.test(await cust.textContent('.spin-n')), 'frame counter');
+    await cust.screenshot({ path: join(SHOTS, '20-spin-viewer.png') });
+    await cust.keyboard.press('Escape');
+    assert(!(await cust.$('.mv')), 'Esc closes');
+    await cust.click('#media-bar [data-media]:has-text("360° interior")');
+    await cust.waitForSelector('.pnlm-stub');
+    const pano = await cust.evaluate(() => window.__PANO);
+    assert(pano.type === 'equirectangular' && pano.panorama === m.find((x) => x.kind === 'interior360').url, JSON.stringify(pano));
+    await cust.click('.mv-x');
+    assert(await cust.evaluate(() => window.__PANO_DESTROYED === 1), 'viewer cleaned up');
+    await cust.click('#media-bar [data-media]:has-text("Walkaround video")');
+    await cust.waitForSelector('video.mv-video');
+    assert((await cust.getAttribute('video.mv-video', 'src')) === m.find((x) => x.kind === 'video').url, 'video plays the file');
+    await cust.click('.mv-x');
+    await cust.goto(`${ORIGIN}/`);
+    await cust.waitForSelector('.inv-card');
+    assert((await cust.textContent('.inv-card[href*="2018-jeep"] .inv-media')).includes('360°'), 'grid badge');
+    await cust.close();
+
+    // delete the video
+    await page.click('.sm-item:has(strong:text-is("Walkaround video")) [data-mdel]');
+    await page.waitForSelector('#toast >> text=Deleted');
+    const left = (await db()).vehicle_media.map((x) => x.kind).sort().join();
+    assert(left === 'interior360,spin', 'only the video deleted: ' + left);
   });
   await step('nothing else is loaded for a photographer (no inbox counts, no leads)', async () => {
     const calls = await page.evaluate(() => window.__CALLS.map((c) => c.table).filter(Boolean));
