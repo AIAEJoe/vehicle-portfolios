@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import { DEFAULT_PROGRAM as P, mentionsProgram, programStatus, programStickerLine } from '../../public/js/warranty-program.js';
 
 test('descriptions that mention the program', () => {
-  for (const d of ['Includes our LIFETIME LIMITED POWERTRAIN WARRANTY!', 'lifetime power-train warranty included', 'Lifetime Power Train Warranty',
+  for (const d of ['Lifetime Warranty - Unlimited Time & Miles', 'Includes our LIFETIME LIMITED POWERTRAIN WARRANTY!', 'lifetime power-train warranty included',
     'Comes with NSB Chevy lifetime powertrain warranties.', 'Warranty: Lifetime (powertrain)']) assert.ok(mentionsProgram(d, P.match), d);
-  for (const d of ['Balance of factory powertrain warranty', 'Lifetime oil changes', 'Sold as is', '', null, 'lifetimepowertrainwarranty'])
+  for (const d of ['Balance of factory powertrain warranty', 'Lifetime oil changes', 'Sold as is', '', null, 'lifetimewarranty'])
     assert.ok(!mentionsProgram(d, P.match), String(d));
+  assert.ok(mentionsProgram('Includes our Lifetime Limited Powertrain Warranty', 'lifetime powertrain warranty'), 'a stricter match still works');
+  assert.ok(!mentionsProgram('Lifetime Warranty - Unlimited Time & Miles', 'lifetime powertrain warranty'), 'which is why the default is now "lifetime warranty"');
   assert.ok(!mentionsProgram('anything', ''), 'empty match never matches');
 });
 
@@ -28,7 +30,7 @@ test('program status per car', () => {
 });
 
 test('sticker line only when the Buyers Guide really has it', () => {
-  assert.equal(programStickerLine(applied, P), 'Lifetime Limited Powertrain Warranty included');
+  assert.equal(programStickerLine(applied, P), 'Lifetime Limited Powertrain Warranty – unlimited time & miles while you own it');
   assert.equal(programStickerLine(base, P), null);
   assert.equal(programStickerLine({ ...applied, bg_warranty: 'as_is' }, P), null);
   assert.equal(programStickerLine(applied, { ...P, sticker_line: '' }), P.name);
@@ -40,5 +42,5 @@ test('default program wording passes the FTC shorthand rule', () => {
   assert.equal(P.labor_pct, 100);
   assert.equal(P.parts_pct, 100);
   assert.match(P.deductible, /\$100/);
-  assert.ok(P.systems.every((s) => /not transferable/.test(s.duration)));
+  assert.ok(P.systems.every((s) => /not transferable/.test(s.duration) && /no mileage limit/.test(s.duration)));
 });
