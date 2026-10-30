@@ -40,7 +40,7 @@ test('sticker story: CHOMES facts with their source, never internal fields', () 
   for (const want of ['2018 · 8 years old', '10,159 a year · average for its age', '2 prior owners (CARFAX report)', 'No accidents reported (CARFAX report)',
     '14 service records', 'No title issues reported']) assert.ok(text.includes(want), want);
   for (const bad of ['450', 'auction', 'hot']) assert.ok(!JSON.stringify(s).includes(bad), 'leaked ' + bad);
-  assert.match(s.credit, /Jonathan Dawson and Sellchology/);
+  assert.ok(!/CHOMES|Sellchology|Jonathan Dawson/.test(JSON.stringify(s)), 'nothing internal names CHOMES on the window');
 });
 
 test('sticker story is held while an FTC review is pending, and shown once cleared', () => {

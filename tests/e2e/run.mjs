@@ -649,8 +649,8 @@ console.log('Dashboard');
     await page.waitForSelector('.ws-story');
     const t = await page.textContent('.ws');
     for (const x of ['Vehicle story', '8 years old', 'a year · average for its age', '2 prior owners (CARFAX report)', '1 reported: Minor damage, rear bumper, 2021 (CARFAX report)',
-      '14 service records', 'Jonathan Dawson and Sellchology', 'Four Wheel Drive']) assert(t.includes(x), x);
-    for (const bad of ['Rear brake pads', 'Trade-in', 'Wranglers turn', '$450']) assert(!t.includes(bad), 'leaked ' + bad);
+      '14 service records', 'Four Wheel Drive']) assert(t.includes(x), x);
+    for (const bad of ['Rear brake pads', 'Trade-in', 'Wranglers turn', '$450', 'CHOMES', 'Sellchology', 'Jonathan Dawson']) assert(!t.includes(bad), 'leaked ' + bad);
     await page.emulateMedia({ media: 'print' });
     assert(!(await page.isVisible('.admin-top')) && !(await page.isVisible('.page-head')), 'chrome hidden when printing');
     const box = await page.$eval('.ws', (e) => e.getBoundingClientRect());

@@ -82,7 +82,7 @@ Every used and certified pre-owned vehicle page shows the Buyers Guide (front an
 
 ## CHOMES vehicle story (phase 1: team entry)
 
-CHOMES (Condition, History, Old, Miles, Equipment, Supply and demand) was created by **Jonathan Dawson and Sellchology**. Every used and certified vehicle gets a CHOMES record, entered once by the store team on the vehicle's **CHOMES** tab. The tab badge counts the required fields still empty.
+CHOMES (Condition, History, Old, Miles, Equipment, Supply and demand) was created by **Jonathan Dawson and Sellchology**. Every used and certified vehicle gets a CHOMES record, entered once by the store team on the vehicle's **CHOMES** tab. The tab badge counts the required fields still empty. CHOMES is internal: the name and credit appear only on staff screens, never on anything a customer sees (vehicle page, window sticker, Buyers Guide).
 
 | Letter | Where the values come from |
 |---|---|
