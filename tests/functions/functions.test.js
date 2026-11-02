@@ -56,6 +56,7 @@ test('host to dealer slug', () => {
   assert.equal(dealerSlugFromHost('otherdealer.aiautoengine.com:443', ENV), 'otherdealer');
   assert.equal(dealerSlugFromHost('vehicle-portfolios.pages.dev', ENV), 'nsbchevy');
   assert.equal(dealerSlugFromHost('www.aiautoengine.com', ENV), 'nsbchevy');
+  assert.equal(dealerSlugFromHost('seo.aiautoengine.com', ENV), 'nsbchevy', 'seo is the SEO Audits app, not a dealer');
 });
 
 test('phone normalisation', () => {
