@@ -12,6 +12,29 @@
 import { html, mount } from '../core.js';
 import { closeOnBack } from '../overlay-back.js';
 
+// Listing sites (and LotSync) want 4:3 photos. Phones often hand the browser a 16:9 stream, so every shot is
+// cropped to the centre 4:3 (3:4 when the phone is upright), and the live view shades what will be cut off.
+export function crop43(w, h) {
+  const landscape = w >= h;
+  const target = landscape ? 4 / 3 : 3 / 4;
+  const r = w / h;
+  if (Math.abs(r - target) < 0.01) return { sx: 0, sy: 0, sw: w, sh: h };
+  if (r > target) { const sw = Math.round(h * target); return { sx: Math.round((w - sw) / 2), sy: 0, sw, sh: h }; }
+  const sh = Math.round(w / target); return { sx: 0, sy: Math.round((h - sh) / 2), sw: w, sh };
+}
+
+async function cropBlobTo43(blob) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const c = crop43(bmp.width, bmp.height);
+    if (c.sw === bmp.width && c.sh === bmp.height) return blob;
+    const cv = document.createElement('canvas');
+    cv.width = c.sw; cv.height = c.sh;
+    cv.getContext('2d').drawImage(bmp, c.sx, c.sy, c.sw, c.sh, 0, 0, c.sw, c.sh);
+    return await new Promise((r) => cv.toBlob((b) => r(b || blob), 'image/jpeg', 0.92));
+  } catch { return blob; }
+}
+
 export const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
 export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = false, hint = '' }) {
@@ -52,7 +75,8 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
     if (!vw || !vh) return;
     const sw = video.clientWidth, sh = video.clientHeight;
     const scale = Math.min(sw / vw, sh / vh);
-    Object.assign(frame.style, { width: `${vw * scale}px`, height: `${vh * scale}px`, left: `${(sw - vw * scale) / 2}px`, top: `${(sh - vh * scale) / 2}px` });
+    const c = crop43(vw, vh); // the grid covers exactly the 4:3 picture that will be kept
+    Object.assign(frame.style, { width: `${c.sw * scale}px`, height: `${c.sh * scale}px`, left: `${(sw - vw * scale) / 2 + c.sx * scale}px`, top: `${(sh - vh * scale) / 2 + c.sy * scale}px` });
   };
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', fit);
@@ -61,7 +85,7 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 }, aspectRatio: { ideal: 4 / 3 } },
       });
       if (closed) { stream.getTracks().forEach((t) => t.stop()); return; }
       video.srcObject = stream;
@@ -81,11 +105,12 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
 
   async function grab() {
     if (imageCapture) {
-      try { return await imageCapture.takePhoto(); } catch { /* fall back to a video frame */ }
+      try { return await cropBlobTo43(await imageCapture.takePhoto()); } catch { /* fall back to a video frame */ }
     }
+    const k = crop43(video.videoWidth, video.videoHeight);
     const c = document.createElement('canvas');
-    c.width = video.videoWidth; c.height = video.videoHeight;
-    c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+    c.width = k.sw; c.height = k.sh;
+    c.getContext('2d').drawImage(video, k.sx, k.sy, k.sw, k.sh, 0, 0, k.sw, k.sh);
     return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
   }
 

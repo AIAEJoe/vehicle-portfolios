@@ -58,12 +58,13 @@ export function mediaSection({ box, ctx, D }) {
                   <label class="btn ghost sm">From roll<input type="file" accept="image/*" multiple class="sr-only" data-spin-roll></label>` : ''}
                 ${k === 'interior360' ? html`<label class="btn alt sm">${m ? 'Replace' : 'Add'} 360 photo<input type="file" accept="image/*" class="sr-only" data-pano></label>` : ''}
                 ${k === 'video' ? html`${recorderSupported() ? html`<button type="button" class="btn alt sm" data-rec>${m ? 'Re-record' : 'Record'}</button>` : ''}
+                  <label class="btn ghost sm" title="Opens the phone's own camera: steadier video (stabilization)">Phone camera<input type="file" accept="video/*" capture="environment" class="sr-only" data-video-roll></label>
                   <label class="btn ghost sm">From roll<input type="file" accept="video/*" class="sr-only" data-video-roll></label>` : ''}
                 ${m ? html`<button type="button" class="btn ghost sm" data-view="${m.id}">View</button><button type="button" class="btn ghost sm del" data-mdel="${m.id}" aria-label="Delete ${MEDIA_LABEL[k]}">🗑</button>` : ''}
               </div></div></div>`;
         })}
       </div>
-      <p class="hint" style="margin:8px 0 0"><b>Spin:</b> stand about 10 ft from the car, take the first photo at the front corner, then take one big sidestep around the car between shots, keeping it centered (${SPIN_FRAMES} shots). <b>Interior 360:</b> take it with the 360 camera's app, save it to the phone, then add it here.</p>
+      <p class="hint" style="margin:8px 0 0"><b>Spin:</b> stand about 10 ft from the car, take the first photo at the front corner, then take one big sidestep around the car between shots, keeping it centered (${SPIN_FRAMES} shots). <b>Interior 360:</b> take it with the 360 camera's app, save it to the phone, then add it here. <b>Video:</b> <i>Record</i> films 720p HD at 30 fps here; for steadier footage use <i>Phone camera</i>, with iPhone Settings → Camera → Record Video set to <b>720p HD at 30 fps</b> (keeps clips small enough to upload).</p>
       ${mine.length ? html`<ul class="sm-jobs">${mine.map((j) => html`<li class="${j.status}">${j.label}: ${j.status === 'failed'
         ? html`<span>didn't upload (${j.error})</span> <button type="button" class="btn sm" data-jretry="${j.id}">Try again</button>`
         : j.status === 'done' ? '✓ uploaded' : `uploading${j.total > 1 ? ` ${j.done} of ${j.total}` : '…'}`}</li>`)}</ul>` : ''}
