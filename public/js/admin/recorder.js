@@ -1,6 +1,9 @@
 // Walkaround video recorder for the Photos page. Records in the page (MediaRecorder) at 720p and about 2.5 Mbit/s,
 // so a 2-minute walkaround is roughly 40 MB and uploads over a phone connection. A phone's own camera app records
 // 4K files that are often hundreds of MB, which is why this exists; "Video from camera roll" still takes short clips.
+// Listing sites (and LotSync) ask for 720p HD at 30 fps, so that's what's requested and capped here.
+// Browsers can't switch on the phone's video stabilization; for the steadiest footage use the phone's own camera
+// ("Phone camera" on the Photos page) set to 720p HD at 30 fps.
 import { html, mount } from '../core.js';
 import { closeOnBack } from '../overlay-back.js';
 
@@ -30,6 +33,7 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
       <div class="cam-msg" role="status" aria-live="polite">Starting camera…</div>
       <div class="cam-hint">Hold the phone sideways. Start at the front corner and walk slowly around the car; finish inside.</div></div>
     <div class="cam-bar">
+      <button type="button" class="cam-grid-toggle" aria-pressed="true" title="Grid">#</button>
       <button type="button" class="rec-mic" aria-pressed="true" title="Sound">🎙</button>
       <button type="button" class="cam-shutter rec-btn" aria-label="Start recording" disabled></button>
       <button type="button" class="cam-done">Cancel</button>
@@ -46,13 +50,28 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
   const btn = box.querySelector('.rec-btn');
   const time = box.querySelector('.rec-time');
   const mic = box.querySelector('.rec-mic');
+  const frame = box.querySelector('.cam-frame');
+  // the 3x3 grid sits exactly over the picture being recorded
+  const fit = () => {
+    const vw = live.videoWidth, vh = live.videoHeight;
+    if (!vw || !vh) return;
+    const sw = live.clientWidth, sh = live.clientHeight;
+    const scale = Math.min(sw / vw, sh / vh);
+    Object.assign(frame.style, { width: `${vw * scale}px`, height: `${vh * scale}px`, left: `${(sw - vw * scale) / 2}px`, top: `${(sh - vh * scale) / 2}px` });
+  };
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  box.querySelector('.cam-grid-toggle').addEventListener('click', (e) => {
+    const on = box.classList.toggle('no-grid') === false;
+    e.currentTarget.setAttribute('aria-pressed', String(on));
+  });
   let stream = null, rec = null, chunks = [], started = 0, tick = null, result = null, closed = false, sound = true;
 
   async function start() {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     btn.disabled = true;
-    const video = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+    const video = { facingMode: { ideal: 'environment' }, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, aspectRatio: { ideal: 16 / 9 }, frameRate: { ideal: 30, max: 30 } };
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video, audio: sound }).catch((e) => {
         if (!sound) throw e;
@@ -60,8 +79,15 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
         return navigator.mediaDevices.getUserMedia({ video, audio: false });
       });
       if (closed) { stream.getTracks().forEach((t) => t.stop()); return; }
+      const track = stream.getVideoTracks()[0];
+      // ask again for 720p / 30 fps on the running track (some phones ignore the first request)
+      if (track && track.applyConstraints) await track.applyConstraints({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }).catch(() => {});
       live.srcObject = stream;
       await live.play().catch(() => {});
+      await new Promise((r) => (live.videoWidth ? r() : live.addEventListener('loadedmetadata', r, { once: true })));
+      fit();
+      const st = track && track.getSettings ? track.getSettings() : {};
+      if (st.height || st.width) box.querySelector('.cam-label').textContent = `${label}${label ? ' · ' : ''}${Math.min(st.width || 0, st.height || 0)}p${st.frameRate ? ` · ${Math.round(st.frameRate)} fps` : ''}`;
       msg.textContent = '';
       btn.disabled = false;
     } catch (e) {
@@ -92,6 +118,7 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
       const seconds = Math.round((Date.now() - started) / 1000);
       result = { file: new File([blob], `walkaround-${Date.now()}.${mime.includes('mp4') ? 'mp4' : 'webm'}`, { type: mime }), seconds };
       box.classList.remove('recording');
+      box.classList.add('reviewing');
       live.hidden = true;
       review.hidden = false;
       review.src = URL.createObjectURL(blob);
@@ -122,6 +149,7 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
     result = null;
     msg.textContent = '';
     review.hidden = true;
+    box.classList.remove('reviewing');
     live.hidden = false;
     box.querySelector('.cam-bar:not(.rec-after)').hidden = false;
     box.querySelector('.rec-after').hidden = true;
@@ -144,6 +172,8 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
     stopRec();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     if (review.src) URL.revokeObjectURL(review.src);
+    window.removeEventListener('resize', fit);
+    window.removeEventListener('orientationchange', fit);
     document.body.classList.remove('cam-open');
     box.remove();
     onClose && onClose();

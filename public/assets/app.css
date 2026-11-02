@@ -656,3 +656,9 @@ body.mv-open { overflow: hidden; }
 .shoot-recent button { border: 1px solid var(--line, #ddd); background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
 .shoot-a2hs { display: flex; gap: 10px; align-items: flex-start; }
 .shoot-a2hs p { margin: 0; flex: 1; }
+
+/* photos: shade what the 4:3 crop will cut off */
+.cam:not(.rec) .cam-stage { overflow: hidden; }
+.cam:not(.rec) .cam-frame { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .5); }
+.rec.reviewing .cam-frame { display: none; }
+.rec .cam-bar:not(.rec-after) { gap: 10px; }
