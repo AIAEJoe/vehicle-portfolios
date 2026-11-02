@@ -2,6 +2,7 @@
 // so a 2-minute walkaround is roughly 40 MB and uploads over a phone connection. A phone's own camera app records
 // 4K files that are often hundreds of MB, which is why this exists; "Video from camera roll" still takes short clips.
 import { html, mount } from '../core.js';
+import { closeOnBack } from '../overlay-back.js';
 
 export const MAX_VIDEO_SECONDS = 120;
 export const MAX_VIDEO_BYTES = 45 * 1024 * 1024;
@@ -135,9 +136,11 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
     onVideo(r.file, r.seconds);
   });
 
-  function close() {
+  let release = () => {};
+  function close(fromBack) {
     if (closed) return;
     closed = true;
+    if (fromBack !== true) release();
     stopRec();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     if (review.src) URL.revokeObjectURL(review.src);
@@ -145,7 +148,8 @@ export function openRecorder({ onVideo, onClose, label = '', maxSeconds = MAX_VI
     box.remove();
     onClose && onClose();
   }
-  box.querySelector('.cam-done').addEventListener('click', close);
+  box.querySelector('.cam-done').addEventListener('click', () => close());
+  release = closeOnBack(() => close(true));
   start();
   return { close };
 }
