@@ -115,7 +115,7 @@ const SEED = {
 };
 
 // ---- static server + mocks ----
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
+const TYPES = { '.webmanifest': 'application/manifest+json', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const api = { leads: [], tracks: [], imports: 0, ingests: 0, sends: [], a2p: [], domains: [], dealers: [] };
 const indexHtml = readFileSync(join(PUB, 'index.html'), 'utf8').replace('</head>',
   `<script>window.VP_CONFIG={"supabaseUrl":"https://proj.supabase.co","supabaseAnonKey":"anon","dealer":"nsbchevy"}</script></head>`);
@@ -1652,6 +1652,51 @@ console.log('Photographer');
     await page.waitForSelector('#toast >> text=Deleted');
     const left = (await db()).vehicle_media.map((x) => x.kind).sort().join();
     assert(left === 'interior360,spin', 'only the video deleted: ' + left);
+  });
+  await step('the car stays in the address: reload and Back return to it; recent cars listed', async () => {
+    await page.goto(`${ORIGIN}/admin/shoot`);
+    await page.fill('#stock', 'R287418B'); await page.click('#find button');
+    await page.waitForSelector('.shoot-car');
+    assert(new URL(page.url()).searchParams.get('car') === V, 'car id in the address: ' + page.url());
+    await page.reload();
+    await page.waitForSelector('.shoot-car >> text=2018 Jeep Wrangler');
+    await page.click('#next');
+    await page.waitForSelector('.shoot-recent button');
+    assert((await page.textContent('.shoot-recent')).includes('2018 Jeep Wrangler · R287418B'), 'recent car, short label');
+    assert(!new URL(page.url()).searchParams.get('car'), 'next car clears it');
+    await page.click('.shoot-recent button');
+    await page.waitForSelector('.shoot-car >> text=2018 Jeep Wrangler');
+  });
+  await step('camera and video: hidden buttons stay hidden, side-on layout, Back closes the camera not the page', async () => {
+    const b2 = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    const c2 = await b2.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, permissions: ['camera', 'microphone'], userAgent: 'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile' });
+    await c2.addInitScript(() => { localStorage.setItem('stub-session', JSON.stringify({ access_token: 'x', user: { id: '9d2c1f1e-0000-4000-8000-0000000000f0', email: 'photo@lotpics.test' } })); });
+    await setup(c2);
+    const p2 = await c2.newPage();
+    const errs = []; p2.on('pageerror', (e) => errs.push(String(e)));
+    try {
+      await p2.goto(`${ORIGIN}/admin/shoot?car=${V}`);
+      await p2.waitForSelector('[data-rec]');
+      await p2.click('[data-rec]');
+      await p2.waitForSelector('.rec .rec-btn:not([disabled])', { timeout: 10000 });
+      assert(!(await p2.isVisible('[data-use]')) && !(await p2.isVisible('[data-retake]')), '"Use this video" is hidden before recording');
+      const top = await p2.$eval('.cam-top', (e) => e.getBoundingClientRect());
+      const bar = await p2.$eval('.cam-bar:not(.rec-after)', (e) => e.getBoundingClientRect());
+      assert(top.right <= bar.left + 1, `label doesn't run under the controls: top.right ${top.right}, bar.left ${bar.left}`);
+      assert((await p2.textContent('.cam-label')) === '2018 Jeep Wrangler · R287418B', 'short label');
+      await p2.screenshot({ path: join(SHOTS, '17b-recorder-landscape.png') });
+      await p2.goBack();
+      await p2.waitForSelector('.rec', { state: 'detached' });
+      assert(new URL(p2.url()).searchParams.get('car') === V && await p2.isVisible('.shoot-car'), 'still on the same car after Back');
+      // the series camera too
+      await p2.click('#series');
+      await p2.waitForSelector('.cam .cam-shutter:not([disabled])', { timeout: 10000 });
+      await p2.click('.cam-done');
+      await p2.waitForSelector('.cam', { state: 'detached' });
+      await p2.waitForTimeout(300);
+      assert(await p2.isVisible('.shoot-car'), 'Done returns to the car without leaving the page');
+      assert(!errs.length, errs.join('; '));
+    } finally { await b2.close(); }
   });
   await step('nothing else is loaded for a photographer (no inbox counts, no leads)', async () => {
     const calls = await page.evaluate(() => window.__CALLS.map((c) => c.table).filter(Boolean));

@@ -9,7 +9,7 @@
 //
 // Every photo is tied to the car on screen when it was taken. A copy stays on the phone until it has uploaded,
 // so a dropped signal or closed page doesn't lose anything: the next visit finishes the uploads.
-import { sb, html, mount, must, $, on, errMsg, toast, vTitle, miles, uuid } from '../core.js';
+import { sb, html, mount, must, $, on, errMsg, toast, vTitle, miles, uuid, store } from '../core.js';
 import { adminPage } from './layout.js';
 import { resizeImage, uploadFile, removeFile } from './media.js';
 import { openCamera, cameraSupported } from './camera.js';
@@ -21,6 +21,12 @@ const RETRY_DELAYS = [2000, 6000, 15000, 30000];
 const CONCURRENCY = 2;
 export const normalizeStock = (t) => String(t || '').toUpperCase().replace(/^#/, '').replace(/[\s-]+/g, '').trim();
 const SEL = 'id,slug,condition,year,make,model,trim,stock_number,vin,exterior_color,mileage,status,description,vehicle_photos(id,url,position,source,caption,storage_path,created_at)';
+// Short camera label: year make model and stock (feed trims can be very long).
+export const shortLabel = (v) => `${[v.year, v.make, v.model].filter(Boolean).join(' ')}${v.stock_number ? ` · ${v.stock_number}` : ''}`;
+const RECENT_KEY = 'shoot-recent';
+const recentCars = () => { try { return JSON.parse(store(RECENT_KEY) || '[]'); } catch { return []; } };
+const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const byPos = (a, b) => a.position - b.position || String(a.created_at).localeCompare(String(b.created_at));
 
 export default async function shoot(el, params, token = {}) {
@@ -49,7 +55,10 @@ export default async function shoot(el, params, token = {}) {
         enterkeyhint="search" placeholder="e.g. PJ17152 or 6227" aria-describedby="stock-hint"><button class="btn">Find</button></div>
       <div class="hint" id="stock-hint">Any 4 or more characters of the VIN work, usually the last 4.</div>
       <div id="find-msg"></div>
+      <div id="recent"></div>
     </form>
+    ${isIos() && !standalone() && store('shoot-a2hs') !== 'no' ? html`<div class="card shoot-a2hs" id="a2hs"><p class="small"><b>Full-screen camera:</b> add this page to your Home Screen (Share button → <b>Add to Home Screen</b>), then open it from there. Safari's address bar and tabs won't take up the screen.</p>
+      <button type="button" class="btn ghost sm" id="a2hs-x" aria-label="Hide this tip">✕</button></div>` : ''}
     <div id="car"></div>
     <div id="media"></div>
     <div id="manage"></div>
@@ -58,6 +67,22 @@ export default async function shoot(el, params, token = {}) {
   const input = $('#stock', main);
   input.focus();
   const media = mediaSection({ box: $('#media', main), ctx, D });
+  function drawRecent() {
+    const list = recentCars().filter((r) => !car || r.id !== car.v.id).slice(0, 5);
+    mount($('#recent', main), list.length ? html`<div class="small sub" style="margin-top:8px">Recent:</div><div class="shoot-recent">${list.map((r) => html`<button type="button" data-recent="${r.id}">${r.label}</button>`)}</div>` : '');
+  }
+  async function openCar(id) {
+    try {
+      const v = must(await sb.from('vehicles').select(SEL).eq('dealership_id', D).eq('id', id).maybeSingle());
+      if (v) pick(v); else { history.replaceState(history.state, '', location.pathname); drawRecent(); }
+    } catch (err) { toast(errMsg(err), 'bad'); }
+  }
+  on(main, 'click', '[data-recent]', (e, b) => openCar(b.dataset.recent));
+  const a2x = $('#a2hs-x', main);
+  a2x && a2x.addEventListener('click', () => { store('shoot-a2hs', 'no'); $('#a2hs', main).remove(); });
+  drawRecent();
+  const startCar = new URLSearchParams(location.search).get('car');
+  if (startCar) openCar(startCar);
 
   // ---------- find the car ----------
   $('#find', main).addEventListener('submit', async (e) => {
@@ -87,6 +112,13 @@ export default async function shoot(el, params, token = {}) {
   });
 
   function pick(v) {
+    // Remember the car in the address, so Back, a reload, or the phone closing the tab returns to it.
+    const u = new URL(location.href);
+    u.searchParams.set('car', v.id);
+    history.replaceState(history.state, '', u.pathname + u.search);
+    const recent = [{ id: v.id, label: shortLabel(v) }, ...recentCars().filter((r) => r.id !== v.id)].slice(0, 6);
+    store(RECENT_KEY, JSON.stringify(recent));
+    drawRecent();
     const photos = (v.vehicle_photos || []).slice().sort(byPos);
     car = { v, photos, cover: !photos.some((p) => p.source === 'upload'), seq: 0, session: [] };
     bounds();
@@ -143,7 +175,7 @@ export default async function shoot(el, params, token = {}) {
     const add = (files) => enqueue([...files]);
     const series = $('#series', main);
     series && series.addEventListener('click', () => {
-      const label = `${vTitle(v)} · ${v.stock_number || ''}`;
+      const label = shortLabel(v);
       openCamera({ label, onPhoto: (f) => add([f]), onClose: (n) => { if (n) toast(`${n} photo${n === 1 ? '' : 's'} taken`); } });
     });
     $('#cam', main).addEventListener('change', (e) => { add(e.target.files); e.target.value = ''; });
@@ -154,7 +186,11 @@ export default async function shoot(el, params, token = {}) {
       const r = await saveToDevice(car.session);
       if (r === 'shared' || r === 'downloaded') toast(r === 'shared' ? 'Choose "Save Images" to keep them in Photos' : 'Photos downloaded');
     });
-    $('#next', main).addEventListener('click', () => { car = null; drawCar(); media.show(null); input.focus(); window.scrollTo(0, 0); });
+    $('#next', main).addEventListener('click', () => {
+      car = null; drawCar(); media.show(null);
+      history.replaceState(history.state, '', location.pathname);
+      drawRecent(); input.focus(); window.scrollTo(0, 0);
+    });
   }
 
   // ---------- arrange: reorder, cover, caption, delete ----------
@@ -230,7 +266,7 @@ export default async function shoot(el, params, token = {}) {
       car.seq++;
       // New photos first (cover): below everything already there, in shooting order. Otherwise after the last one.
       const pos = car.cover ? car.min - 100000 + car.seq : car.max + car.seq;
-      const q = { id: uuid(), file, preview: URL.createObjectURL(file), vid: v.id, label: `${vTitle(v)} · ${v.stock_number || ''}`, pos, status: 'waiting', tries: 0 };
+      const q = { id: uuid(), file, preview: URL.createObjectURL(file), vid: v.id, label: shortLabel(v), pos, status: 'waiting', tries: 0 };
       queue.push(q);
       car.session.push(file);
       savePending({ id: q.id, dealership_id: D, vid: q.vid, label: q.label, pos, name: file.name, type: file.type, blob: file, created: Date.now() });

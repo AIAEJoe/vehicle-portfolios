@@ -494,7 +494,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- In-app series camera ---------- */
 body.cam-open { overflow: hidden; }
-.cam { position: fixed; inset: 0; z-index: 1000; background: #000; color: #fff; display: flex; flex-direction: column; }
+/* [hidden] must win over display:flex on camera bars (otherwise "Use this video" shows before recording). */
+.cam [hidden], .mv [hidden] { display: none !important; }
+.cam { position: fixed; inset: 0; height: 100dvh; z-index: 1000; background: #000; color: #fff; display: flex; flex-direction: column; }
 .cam-stage { position: relative; flex: 1; min-height: 0; }
 .cam-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .cam-frame { position: absolute; pointer-events: none; }
@@ -515,8 +517,15 @@ body.cam-open { overflow: hidden; }
 .cam-shutter:active { transform: scale(.94); } .cam-shutter:disabled { opacity: .4; }
 .cam-done, .cam-grid-toggle { min-width: 64px; min-height: 44px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, .5); background: transparent; color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; }
 .cam-grid-toggle[aria-pressed="true"] { background: rgba(255, 255, 255, .2); }
-@media (orientation: landscape) and (max-height: 520px) {
-  .cam { flex-direction: row; } .cam-bar { flex-direction: column-reverse; padding: 14px; justify-content: space-between; }
+/* Phone on its side: picture on the left, controls in a column on the right, nothing on top of the picture. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .cam { flex-direction: row; }
+  .cam-bar { flex-direction: column-reverse; padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px 12px; justify-content: space-between; width: 116px; flex: none; }
+  .cam-top { right: 116px; padding-left: max(14px, env(safe-area-inset-left)); }
+  .cam-stage { padding-left: env(safe-area-inset-left); }
+  .rec-after { flex-direction: column; justify-content: center; }
+  .rec-after .btn { width: 100%; padding: 8px; font-size: 14px; }
+  .cam-hint { font-size: 12px; padding: 4px 8px; }
 }
 .audit { display: flex; gap: 14px; align-items: flex-start; }
 .audit-score { flex: none; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: baseline; justify-content: center; padding-top: 16px; font-weight: 900; }
@@ -642,3 +651,8 @@ body.mv-open { overflow: hidden; }
 .feed-run-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
 .price-history { list-style: none; padding: 0; margin: 6px 0 0; font-size: 14px; }
 .price-history li { padding: 3px 0; border-top: 1px solid var(--line, #eee); }
+
+.shoot-recent { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.shoot-recent button { border: 1px solid var(--line, #ddd); background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.shoot-a2hs { display: flex; gap: 10px; align-items: flex-start; }
+.shoot-a2hs p { margin: 0; flex: 1; }

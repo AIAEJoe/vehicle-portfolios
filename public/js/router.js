@@ -44,6 +44,6 @@ export function start() {
     navigate(url.pathname + url.search + url.hash);
     window.scrollTo(0, 0);
   });
-  window.addEventListener('popstate', render);
+  window.addEventListener('popstate', () => { if (!window.__vpOverlay) render(); }); // overlays handle their own Back
   render();
 }

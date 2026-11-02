@@ -1,6 +1,7 @@
 // Viewers for a car's walkaround video, exterior 360° spin and interior 360° photo. Used on the customer page and
 // in the admin. Each opens full screen and closes with ✕, Esc or the back of the modal.
 import { html, mount } from './core.js';
+import { closeOnBack } from './overlay-back.js';
 
 export const MEDIA_LABEL = { video: 'Walkaround video', spin: '360° exterior', interior360: '360° interior' };
 export const MEDIA_ICON = { video: '▶', spin: '⟲', interior360: '◎' };
@@ -27,7 +28,12 @@ function modal(title) {
   document.body.classList.add('mv-open');
   mount(box, html`<div class="mv-top"><strong>${title}</strong><button type="button" class="mv-x" aria-label="Close">✕</button></div><div class="mv-body"></div>`);
   const cleanups = [];
-  const close = () => {
+  let release = () => {};
+  let closed = false;
+  const close = (fromBack) => {
+    if (closed) return;
+    closed = true;
+    if (fromBack !== true) release();
     cleanups.forEach((f) => { try { f(); } catch { /* ignore */ } });
     document.removeEventListener('keydown', onKey);
     document.body.classList.remove('mv-open');
@@ -35,7 +41,8 @@ function modal(title) {
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
-  box.querySelector('.mv-x').addEventListener('click', close);
+  box.querySelector('.mv-x').addEventListener('click', () => close());
+  release = closeOnBack(() => close(true));
   box.querySelector('.mv-x').focus();
   return { box, body: box.querySelector('.mv-body'), close, onClose: (f) => cleanups.push(f) };
 }

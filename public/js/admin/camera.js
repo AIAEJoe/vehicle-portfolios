@@ -10,6 +10,7 @@
 // Spin mode (limit + ghost): for an exterior 360° spin. It stops after `limit` frames, shows the previous frame as a
 // faint overlay so each shot lines up with the last, and the first frame near the end so the circle closes.
 import { html, mount } from '../core.js';
+import { closeOnBack } from '../overlay-back.js';
 
 export const cameraSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -109,7 +110,7 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
           ghostImg.hidden = false;
         }
         onPhoto(file);
-        if (limit && count >= limit) { setTimeout(close, 250); }
+        if (limit && count >= limit) { setTimeout(() => close(), 250); }
       }
     } finally { busy = false; }
   });
@@ -117,9 +118,11 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
     const on = box.classList.toggle('no-grid') === false;
     e.currentTarget.setAttribute('aria-pressed', String(on));
   });
-  const close = () => {
+  let release = () => {};
+  const close = (fromBack) => {
     if (closed) return;
     closed = true;
+    if (fromBack !== true) release();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     window.removeEventListener('resize', fit);
     window.removeEventListener('orientationchange', fit);
@@ -129,6 +132,7 @@ export function openCamera({ onPhoto, onClose, label = '', limit = 0, ghost = fa
     box.remove();
     onClose && onClose(count);
   };
-  box.querySelector('.cam-done').addEventListener('click', close);
+  box.querySelector('.cam-done').addEventListener('click', () => close());
+  release = closeOnBack(() => close(true));
   return { close };
 }

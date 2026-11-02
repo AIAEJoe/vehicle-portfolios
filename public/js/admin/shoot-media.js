@@ -153,7 +153,7 @@ export function mediaSection({ box, ctx, D }) {
   box.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b || !v) return;
-    const label = `${vTitle(v)} · ${v.stock_number || ''}`;
+    const label = `${[v.year, v.make, v.model].filter(Boolean).join(' ')}${v.stock_number ? ` · ${v.stock_number}` : ''}`;
     if (b.matches('[data-rec]')) openRecorder({ label, onVideo: (f, s) => addVideo(f, s) });
     if (b.matches('[data-spin]')) {
       const shots = [];
