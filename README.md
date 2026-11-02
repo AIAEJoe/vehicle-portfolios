@@ -230,6 +230,7 @@ Settings → **Dealer warranty program**. The program's terms are set once and t
    - `supabase/migrations/0014_vehicle_media.sql` (walkaround video and 360°). On an existing install, run `supabase/run-2026-10-30i.sql`; also safe to run twice.
    - `supabase/migrations/0015_copy_in_photos.sql` (copy SlipStream photos in). On an existing install, run `supabase/run-2026-10-30j.sql`; also safe to run twice.
    - `supabase/migrations/0016_manager_role.sql` (Manager role, go-live approval). On an existing install, run `supabase/run-2026-10-30k.sql`; also safe to run twice.
+   - `supabase/migrations/0017_feed_safety.sql` (feed safety, import history, price history). On an existing install, run `supabase/run-2026-11-02.sql`; also safe to run twice.
 2. **Authentication → Providers → Email:** turn off public sign-ups.
 3. **URL Configuration:** set Site URL to `https://nsbchevy.aiautoengine.com` and add the redirect URL `https://*.aiautoengine.com/**`.
 4. **Authentication → Users → Add user:** add yourself, then run:
@@ -264,6 +265,16 @@ In `supabase/cron.sql`, replace `REPLACE_WITH_CRON_SECRET` with your secret and 
    - Add a catch-all rule that sends to the Worker.
 
 ---
+
+### Inventory feed safety (`0017_feed_safety.sql`, `functions/_lib/feed.js`)
+
+Every import, from the feed URL, an upload, the relay or SFTP, goes through the same check before anything is removed (`decideHold`):
+- The file must look like a complete inventory. If it lists **less than half** of the vehicles in stock, would remove **more than the allowed share** (Settings → Inventory feed → Safety, 15% by default), has **no price or stock-number column**, or has many lines without a VIN, the import still **adds and updates** the cars it lists but **removes nothing**. It's logged as *Held*. The handoff's example (200 in stock, a damaged file of 10) holds 190 removals.
+- *The file is: changes only* never removes missing cars.
+- **Import history** (`feed_runs`) records every run: source, lines, usable rows, columns found, rows without a VIN, duplicate VINs, cars in stock before, added / updated / removed, and for held runs the reasons and the cars it would have removed. A private copy of each file is kept in the `internal` bucket (`<dealership>/feeds/`), and its SHA-256 is recorded.
+- An admin reviews a held import: **Mark them sold** (`vp_feed_review`) removes only cars that are still in stock **and haven't appeared in a later import**, or **Keep them** dismisses it. Both are recorded with who and when. An optional alert email goes to *Email when an import is held*.
+- Failed imports (unreadable file, no VIN column) are logged too and change nothing.
+- **Price history** (`vehicle_price_history`): every price or MSRP change, from the feed or staff (with who), shown on the vehicle's Details tab.
 
 ### Inventory feeds by SFTP (SFTP To Go)
 

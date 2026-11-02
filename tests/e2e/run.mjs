@@ -109,6 +109,8 @@ const SEED = {
   portfolio_views: [{ id: 1, vehicle_id: V, dealership_id: D, share_id: 'sh1', visitor_id: 'a', user_agent: 'iPhone', viewed_at: new Date(Date.now() - 300000).toISOString() }],
   leads: [],
   dealership_banners: [],
+  feed_runs: [],
+  vehicle_price_history: [{ id: 1, vehicle_id: V, dealership_id: D, old_price: 18900, new_price: 17800, source: 'feed', changed_at: '2026-10-20T10:00:00Z' }],
   vehicle_media: [],
 };
 
@@ -1082,6 +1084,31 @@ console.log('Dashboard');
     assert(s.crm_adf_email === 'nsbchevy@eleadtrack.net' && s.feed_url === 'https://feeds.homenet.test/nsb.csv' && s.notify_on_open === true, JSON.stringify(s));
     assert((await page.inputValue('input[aria-label="Ingest URL"]')).endsWith('/api/inventory/ingest?token=tok123'), 'ingest url');
     assert((await page.inputValue('input[aria-label="Photo feed URL"]')).endsWith('/api/feeds/photos?token=pftok456'), 'photo feed url');
+    // feed safety: options saved, a held import shown with its cars, approving it marks them sold
+    await page.selectOption('#s-feed_mode', 'snapshot');
+    await page.fill('#s-feed_max_removal_pct', '20');
+    await page.fill('#s-feed_alert_email', 'gm@nsb.test');
+    await page.click('#feed button.btn:not([type=button])');
+    await page.waitForTimeout(300);
+    const fs = (await db()).dealership_settings[0];
+    assert(fs.feed_max_removal_pct === 20 && fs.feed_alert_email === 'gm@nsb.test' && fs.feed_mode === 'snapshot', JSON.stringify(fs).slice(0, 200));
+    await page.evaluate(({ D, V }) => { window.__DB.feed_runs.push({ id: 'run1', dealership_id: D, source: 'sftp: inventory.csv', status: 'held', hold_reasons: ['The file lists 10 vehicles but 200 are in stock: less than half.'],
+      usable_rows: 10, active_before: 200, would_remove: 1, remove_ids: [V], remove_sample: [{ id: V, vin: '1C4GJXAG5JW150863', stock_number: 'R287418B', title: '2018 Jeep Wrangler Sport S' }],
+      result: { inserted: 0, updated: 10, marked_sold: 0 }, no_vin_rows: 0, duplicate_vins: [], columns: ['vin'], created_at: new Date().toISOString() }); window.__SAVE(); }, { D, V });
+    await page.reload();
+    await page.waitForSelector('.feed-run.held');
+    const fr = await page.textContent('.feed-run.held');
+    assert(fr.includes('Held: nothing removed') && fr.includes('less than half') && fr.includes('1 would have been removed'), fr);
+    await page.click('.feed-run.held summary');
+    assert((await page.textContent('.feed-run.held')).includes('R287418B'), 'lists the car');
+    await page.click('[data-review="run1"][data-approve="0"]');
+    await page.waitForSelector('#toast >> text=Kept: nothing removed');
+    assert((await db()).feed_runs[0].status === 'removals_dismissed' && (await db()).vehicles.find((x) => x.id === V).status !== 'sold', 'dismissed, car kept');
+    await page.goto(`${ORIGIN}/admin/vehicles/${V}#details`);
+    await page.waitForSelector('.price-history');
+    assert((await page.textContent('.price-history')).includes('$18,900 → $17,800') && (await page.textContent('.price-history')).includes('inventory feed'), 'price history shown');
+    await page.goto(`${ORIGIN}/admin/settings`);
+    await page.waitForSelector('#s-publish_approval');
     await page.selectOption('#s-publish_approval', 'all');
     await page.click('#approval button');
     await page.waitForSelector('#toast >> text=Approval setting saved');

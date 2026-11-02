@@ -10,11 +10,14 @@ export default async function settings(el) {
   if (!page) return;
   const { ctx, main } = page;
   const D = ctx.dealership.id;
-  let d, s, rules = [], cars = [], rulesError = null;
+  let d, s, rules = [], cars = [], rulesError = null, runs = null;
   async function load() {
     d = must(await sb.from('dealerships').select('*').eq('id', D).single());
     s = must(await sb.from('dealership_settings').select('*').eq('dealership_id', D).single());
     await loadRules();
+    // import history (null when the feed-safety SQL hasn't been run yet)
+    const fr = await sb.from('feed_runs').select('*').eq('dealership_id', D).order('created_at', { ascending: false }).limit(15);
+    runs = fr.error ? null : fr.data;
   }
   async function loadRules() {
     try {
@@ -158,14 +161,36 @@ export default async function settings(el) {
         </div>
         <label class="check"><input type="checkbox" name="feed_auto_publish" ${s.feed_auto_publish ? 'checked' : ''}> Publish new vehicles from the feed automatically</label>
         <label class="check"><input type="checkbox" name="feed_mark_missing_sold" ${s.feed_mark_missing_sold ? 'checked' : ''}> Mark vehicles sold when they drop out of the feed</label>
+        ${runs !== null ? html`<h3 style="font-size:16px;margin:16px 0 0">Safety</h3>
+        <div class="grid3 stack-sm">
+          <div><label for="s-feed_mode">The file is</label><select id="s-feed_mode" name="feed_mode">
+            <option value="snapshot" ${s.feed_mode !== 'incremental' ? 'selected' : ''}>A full inventory (every car, every time)</option>
+            <option value="incremental" ${s.feed_mode === 'incremental' ? 'selected' : ''}>Changes only (never remove missing cars)</option></select></div>
+          <div><label for="s-feed_max_removal_pct">Most cars one import may remove</label><input id="s-feed_max_removal_pct" name="feed_max_removal_pct" type="number" min="1" max="100" value="${s.feed_max_removal_pct || 15}"><div class="hint">Percent of inventory. Anything more is held for review.</div></div>
+          <div><label for="s-feed_alert_email">Email when an import is held</label><input id="s-feed_alert_email" name="feed_alert_email" type="email" value="${s.feed_alert_email || ''}" placeholder="gm@dealership.com"></div>
+        </div>
+        <p class="hint">A file that's much smaller than your inventory, would remove more than the share above, or is missing its price or stock number column still adds and updates cars, but removes nothing until an admin reviews it below.</p>` : ''}
         <div class="btn-row" style="margin-top:12px"><button class="btn">Save feed settings</button>
           <button type="button" class="btn alt" id="sync" ${s.feed_url ? '' : 'disabled'}>Sync now</button></div>
       </form>
       <div style="margin-top:16px">
         <strong>Last sync:</strong> ${s.feed_last_sync_at ? dateTime(s.feed_last_sync_at) : 'never'}
         ${r ? (r.error ? html`<div class="notice bad">Last attempt failed (${r.source}, ${dateTime(r.at)}): ${r.error}</div>`
+          : r.held ? html`<div class="notice warn">Held: the last file looked incomplete, so ${r.held_removals} cars were not removed. Review it under Import history.</div>`
           : html`<div class="notice ok">${r.rows} vehicles in feed · ${r.inserted} added · ${r.updated} updated · ${r.marked_sold} marked sold${r.locked ? ` · ${r.locked} locked` : ''}${r.skipped ? ` · ${r.skipped} skipped (no valid VIN)` : ''} (${r.source})</div>`) : ''}
       </div>
+      ${runs && runs.length ? html`<h3 style="font-size:16px;margin-top:20px" id="feed-history">Import history</h3>
+      <div class="feed-runs">${runs.map((x) => html`<div class="feed-run ${x.status}">
+        <div class="feed-run-head"><span class="pill ${{ applied: 'published', held: 'sold', failed: 'sold', removals_approved: 'published', removals_dismissed: 'draft' }[x.status]}">${{ applied: 'Applied', held: 'Held: nothing removed', failed: 'Failed', removals_approved: 'Removals approved', removals_dismissed: 'Removals dismissed' }[x.status]}</span>
+          <span class="small">${dateTime(x.created_at)} · ${x.source}</span></div>
+        ${x.error ? html`<div class="small" style="color:var(--bad)">${x.error}</div>`
+          : html`<div class="small">${x.usable_rows} cars in file${x.active_before != null ? ` · ${x.active_before} in stock before` : ''} · ${(x.result || {}).inserted || 0} added · ${(x.result || {}).updated || 0} updated · ${(x.result || {}).marked_sold || 0} removed${x.would_remove && x.status !== 'applied' ? ` · ${x.would_remove} would have been removed` : ''}${x.no_vin_rows ? ` · ${x.no_vin_rows} lines without a VIN` : ''}${x.duplicate_vins.length ? ` · ${x.duplicate_vins.length} duplicate VINs` : ''}</div>`}
+        ${x.hold_reasons.length ? html`<ul class="small" style="margin:4px 0">${x.hold_reasons.map((h) => html`<li>${h}</li>`)}</ul>` : ''}
+        ${x.status === 'held' ? html`<details><summary class="small">The ${x.would_remove} cars it would have removed</summary><ul class="small">${x.remove_sample.map((v) => html`<li>${v.title} · Stock ${v.stock_number || '–'} · ${v.vin}</li>`)}</ul>
+          ${x.remove_sample.length < x.would_remove ? html`<p class="small sub">…and ${x.would_remove - x.remove_sample.length} more.</p>` : ''}</details>
+          <div class="btn-row" style="margin-top:6px"><button type="button" class="btn danger sm" data-review="${x.id}" data-approve="1">Mark them sold</button><button type="button" class="btn alt sm" data-review="${x.id}" data-approve="0">Keep them (dismiss)</button></div>
+          <p class="hint" style="margin:4px 0 0">Only cars still in stock and not seen in a later import are marked sold.</p>` : ''}
+      </div>`)}</div>` : ''}
       <h3 style="font-size:16px;margin-top:20px">Receive the feed by SFTP</h3>
       <p class="small sub">For providers that can only send by SFTP (Dealer Inspire, HomeNet). Give them the SFTP host and password from Vehicle Portfolios support, plus:</p>
       <ul class="small" style="margin-top:0">
@@ -316,6 +341,8 @@ export default async function settings(el) {
       const patch = {};
       for (const k of keys) patch[k] = String(fd.get(k) ?? '').trim() || null;
       for (const k of checks) patch[k] = fd.get(k) === 'on';
+      if ('feed_max_removal_pct' in patch) patch.feed_max_removal_pct = Math.min(100, Math.max(1, parseInt(patch.feed_max_removal_pct || '15', 10) || 15));
+      if ('feed_mode' in patch && !patch.feed_mode) patch.feed_mode = 'snapshot';
       if ('open_alert_cooldown_minutes' in patch) patch.open_alert_cooldown_minutes = Math.max(0, parseInt(patch.open_alert_cooldown_minutes || '60', 10) || 60);
       s = must(await sb.from('dealership_settings').update(patch).eq('dealership_id', D).select().single());
       toast('Saved');
@@ -327,14 +354,23 @@ export default async function settings(el) {
     });
     $('#feed', main).addEventListener('submit', (e) => {
       e.preventDefault();
-      saveSettings(e.target, ['feed_url', 'feed_auth_header', 'feed_dealer_id'], ['feed_auto_publish', 'feed_mark_missing_sold']).catch((err) => toast(errMsg(err), 'bad'));
+      saveSettings(e.target, ['feed_url', 'feed_auth_header', 'feed_dealer_id', ...(runs !== null ? ['feed_mode', 'feed_max_removal_pct', 'feed_alert_email'] : [])], ['feed_auto_publish', 'feed_mark_missing_sold']).catch((err) => toast(errMsg(err), 'bad'));
     });
 
+    main.querySelectorAll('[data-review]').forEach((b) => b.addEventListener('click', async () => {
+      const approve = b.dataset.approve === '1';
+      if (approve && !confirm('Mark these cars sold? They come off your website and feeds.')) return;
+      try {
+        const n = must(await sb.rpc('vp_feed_review', { p_run_id: b.dataset.review, p_approve: approve }));
+        toast(approve ? `${n} car${n === 1 ? '' : 's'} marked sold` : 'Kept: nothing removed');
+        await load(); draw();
+      } catch (err) { toast(errMsg(err), 'bad'); }
+    }));
     $('#sync', main).addEventListener('click', async (e) => {
       const b = e.target; b.disabled = true; b.textContent = 'Syncing…';
       try {
         const res = await api('/api/inventory/sync', { method: 'POST', auth: true });
-        toast(`Feed synced: ${res.result.inserted} added, ${res.result.updated} updated`);
+        toast(res.result.held ? `Imported, but ${res.result.held_removals} removals were held for review` : `Feed synced: ${res.result.inserted} added, ${res.result.updated} updated`, res.result.held ? 'bad' : '');
       } catch (err) { toast(errMsg(err), 'bad'); }
       await load(); draw();
     });

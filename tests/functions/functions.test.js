@@ -296,7 +296,15 @@ test('track: ignores link-preview bots', async () => {
 const FEED = 'VIN,Stock,Year,Make,Model,Miles,SellingPrice,ImageList\n' +
   '1C4GJXAG5JW150863,R1,2018,Jeep,Wrangler,1,100,https://i.test/1.jpg\n1GCUYDED5RZ100001,N1,2024,Chevrolet,Silverado,2,200,\n1GCUYDED5RZ100002,N2,2024,Chevrolet,Tahoe,3,300,\n';
 
-function mockFeedSupabase(store, settings = {}) {
+// The feed safety pieces: preview of what a file would remove, the run log, and the private copy of the file.
+function mockFeedSafety(store, preview = { active: 0, missing_ids: [], missing_sample: [], new: 0 }) {
+  mock('/rest/v1/rpc/vp_feed_preview', (u, c) => { store.preview = JSON.parse(c.body); return preview; });
+  mock((u, c) => u.includes('/rest/v1/feed_runs') && c.method === 'POST', (u, c) => { (store.runs ||= []).push(JSON.parse(c.body)); return [{ id: 'run1', ...JSON.parse(c.body) }]; });
+  mock((u, c) => u.includes('/storage/v1/object/internal/'), (u) => { store.kept = u; return { Key: 'k' }; });
+}
+
+function mockFeedSupabase(store, settings = {}, preview) {
+  mockFeedSafety(store, preview);
   mock((u) => u.includes('/rest/v1/dealerships'), () => [DEALER]);
   mock((u, c) => u.includes('/rest/v1/dealership_settings') && c.method === 'GET', () => [{ feed_ingest_token: 'secret-token', feed_url: 'https://feeds.homenet.test/nsb.csv', feed_auto_publish: true, feed_mark_missing_sold: true, ...settings }]);
   mock((u, c) => u.includes('/rest/v1/dealership_settings') && c.method === 'PATCH', (u, c) => { store.saved = JSON.parse(c.body); return ''; });
@@ -307,13 +315,14 @@ function mockFeedSupabase(store, settings = {}) {
 
 test('ingest: relay upload with token', async () => {
   const store = {};
-  mockFeedSupabase(store);
+  mockFeedSupabase(store, {}, { active: 4, missing_ids: ['gone1'], missing_sample: [{ id: 'gone1', vin: '1GCUYDED5RZ100009' }], new: 2 }); // one car sold since yesterday
   const res = await ingestPost(ctx(req('https://nsbchevy.aiautoengine.com/api/inventory/ingest?token=secret-token', { method: 'POST', body: FEED, headers: { 'content-type': 'text/csv' } })));
   assert.equal(res.status, 200);
   assert.equal(store.rpc.p_rows.length, 3);
   assert.equal(store.rpc.p_dealership_id, 'd1');
-  assert.equal(store.rpc.p_mark_missing_sold, true);
+  assert.equal(store.rpc.p_mark_missing_sold, true, 'a normal file removes the one sold car');
   assert.equal(store.saved.feed_last_result.source, 'relay upload');
+  assert.equal(store.runs[0].status, 'applied');
 });
 
 test('ingest: wrong token and no session is rejected', async () => {
@@ -404,6 +413,8 @@ test('SFTP upload from Dealer Inspire imports the dealership inventory', async (
   mock('/rest/v1/dealership_settings?dealership_id=eq.d1&select', () => [{ dealership_id: 'd1', feed_auto_publish: true, feed_mark_missing_sold: true }]);
   mock((u, c) => u.includes('/rest/v1/dealership_settings') && c.method === 'PATCH', (u, c) => { patched = JSON.parse(c.body); return ''; });
   mock('/rest/v1/rpc/vp_feed_sync', (u, c) => { synced = JSON.parse(c.body); return { inserted: 2, updated: 1, marked_sold: 0 }; });
+  const safety = {};
+  mockFeedSafety(safety);
   mock((u) => u.startsWith('https://sftptogo-bucket.s3.amazonaws.com/'), (u, c) => {
     assert.match(c.headers.authorization, /Credential=AKIDEXAMPLE\//);
     return u.endsWith('/nsbchevy/inventory.csv') ? new Response(csv) : new Response('NoSuchKey', { status: 404 });
@@ -416,6 +427,9 @@ test('SFTP upload from Dealer Inspire imports the dealership inventory', async (
   assert.equal(synced.p_rows.length, 3);
   assert.deepEqual(synced.p_rows[0].photos, ['https://img/1.jpg', 'https://img/2.jpg']);
   assert.equal(patched.feed_last_result.source, 'sftp: inventory.csv');
+  assert.equal(safety.runs[0].status, 'applied');
+  assert.equal(safety.runs[0].usable_rows, 3);
+  assert.match(safety.kept, /\/internal\/d1\/feeds\/\d{4}-\d{2}-\d{2}-[0-9a-f]{12}\.csv$/, 'a copy of the file is kept privately');
 });
 
 test('SFTP webhook rejects bad signatures and ignores non-feed events', async () => {
