@@ -152,7 +152,9 @@ export default async function vehicleEdit(el, { id }) {
           ${ctx.isAdmin ? html`<button type="button" class="btn danger" id="delete">Delete</button>` : ''}
         </span>
       </div>
-    </form>`);
+    </form>
+    <div id="ph"></div>`);
+    priceHistory($('#ph', box));
 
     const form = $('#details', box);
     form.addEventListener('submit', async (e) => {
@@ -213,6 +215,17 @@ export default async function vehicleEdit(el, { id }) {
         navigate('/admin/vehicles');
       } catch (err) { toast(errMsg(err), 'bad'); }
     });
+  }
+
+  // Every price change, from the feed or staff (vehicle_price_history). Hidden until the feed-safety SQL is run.
+  async function priceHistory(el) {
+    const { data, error } = await sb.from('vehicle_price_history').select('*').eq('vehicle_id', v.id).order('changed_at', { ascending: false }).limit(30);
+    if (error || !data || !data.length || !el.isConnected) return;
+    const who = { feed: 'inventory feed', staff: 'staff', initial: 'first price' };
+    mount(el, html`<div class="card"><h2>Price history</h2><ul class="price-history">${data.map((h) => html`<li>${dateTime(h.changed_at)}: ${h.source === 'initial'
+      ? html`${h.new_price ? money(h.new_price) : 'no price'}${h.new_msrp ? ` (MSRP ${money(h.new_msrp)})` : ''}`
+      : html`${h.old_price ? money(h.old_price) : '–'} → <b>${h.new_price ? money(h.new_price) : '–'}</b>${h.old_msrp !== h.new_msrp ? ` · MSRP ${h.old_msrp ? money(h.old_msrp) : '–'} → ${h.new_msrp ? money(h.new_msrp) : '–'}` : ''}`}
+      <span class="small sub"> · ${who[h.source]}</span></li>`)}</ul></div>`);
   }
 
   // ---------------------------------------------------------------- photos

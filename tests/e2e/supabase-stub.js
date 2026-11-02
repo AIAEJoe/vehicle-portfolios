@@ -247,6 +247,15 @@ export function createClient() {
         return { data: db.dealerships.map((d) => { const p = db.messaging_profiles.find((x) => x.dealership_id === d.id) || {}; const b = db.dealership_billing.find((x) => x.dealership_id === d.id) || {};
           return { id: d.id, slug: d.slug, name: d.name, a2p_status: p.a2p_status, sms_enabled: p.sms_enabled, phone: p.twilio_phone_number, email_domain: p.email_domain, email_domain_status: p.email_domain_status, billing_status: b.status, usage: usageSummary(d.id, true) }; }), error: null };
       }
+      if (fn === 'vp_feed_review') {
+        const run = db.feed_runs.find((x) => x.id === args.p_run_id);
+        if (!run || run.status !== 'held') return { data: null, error: { message: 'This import was already reviewed' } };
+        let n = 0;
+        if (args.p_approve) for (const v of db.vehicles.filter((x) => run.remove_ids.includes(x.id) && ['published', 'draft'].includes(x.status))) { v.status = 'sold'; n++; }
+        run.status = args.p_approve ? 'removals_approved' : 'removals_dismissed';
+        window.__SAVE();
+        return { data: n, error: null };
+      }
       if (fn === 'vp_sticker_equipment') {
         const f = db.vehicle_factory_data.find((x) => x.vehicle_id === args.p_vehicle_id);
         return { data: f ? { features: f.data.features, optional: f.data.optional, chassis: f.data.chassis, as_built: f.data.as_built } : null, error: null };

@@ -161,19 +161,25 @@ export function mapFeedRow(row) {
   };
 }
 
-/** Parse a feed file into rows ready for the vp_feed_sync RPC. */
+/** Parse a feed file into rows ready for the vp_feed_sync RPC, plus what the file contained (for the safety checks). */
 export function feedToRows(text, { dealerId } = {}) {
   const raw = parseDelimited(text);
+  const headers = new Set(raw.length ? Object.keys(raw[0]) : []);
+  const columns = Object.keys(ALIASES).filter((f) => ALIASES[f].some((a) => headers.has(a)));
   let rows = raw.map(mapFeedRow);
+  const before = rows.length;
   if (dealerId) rows = rows.filter((r) => !r.dealer_id || String(r.dealer_id) === String(dealerId));
+  const otherDealer = before - rows.length;
   // drop duplicate VINs (keep first)
   const seen = new Set();
   const out = [];
+  let noVin = 0; const duplicates = [];
   for (const r of rows) {
-    if (!r.vin || seen.has(r.vin)) continue;
+    if (!r.vin) { noVin++; continue; }
+    if (seen.has(r.vin)) { duplicates.push(r.vin); continue; }
     seen.add(r.vin);
     delete r.dealer_id;
     out.push(r);
   }
-  return { rows: out, totalLines: raw.length };
+  return { rows: out, totalLines: raw.length, columns, noVin, duplicates, otherDealer };
 }

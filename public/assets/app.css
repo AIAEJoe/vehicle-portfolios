@@ -635,3 +635,10 @@ body.mv-open { overflow: hidden; }
 .pano { flex: 1; min-height: 0; width: 100%; }
 .pano-msg { text-align: center; padding: 20px; }
 .pano-flat { width: 100%; max-height: 70vh; object-fit: contain; }
+.feed-runs { display: grid; gap: 8px; }
+.feed-run { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 8px 10px; }
+.feed-run.held { border-color: var(--warn, #b7791f); background: var(--warn-bg, #fff8e6); }
+.feed-run.failed { border-color: var(--bad, #b00); }
+.feed-run-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
+.price-history { list-style: none; padding: 0; margin: 6px 0 0; font-size: 14px; }
+.price-history li { padding: 3px 0; border-top: 1px solid var(--line, #eee); }
