@@ -13,3 +13,9 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 grant all on storage.objects to anon, authenticated, service_role;
+-- Like Supabase: pgcrypto lives in the "extensions" schema, which is on the roles' search path but not on a
+-- function's "set search_path = public".
+create schema extensions;
+create extension pgcrypto with schema extensions;
+grant usage on schema extensions to anon, authenticated, service_role;
+alter database vp set search_path = "$user", public, extensions;
