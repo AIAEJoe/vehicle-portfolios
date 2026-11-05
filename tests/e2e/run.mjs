@@ -429,6 +429,20 @@ console.log('Dashboard');
     await page.waitForTimeout(200);
     photos = (await db()).vehicle_photos.sort((a, b) => a.position - b.position);
     assert(photos[0].id === 'p0' && photos[1].id === 'p5', 'moved right');
+    // drag and drop: the first photo onto the third tile's right half lands third
+    const box = async (id) => (await page.locator(`.photo-tile[data-photo="${id}"] img`).boundingBox());
+    const from = await box('p0');
+    const to = await box(photos[2].id);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2, { steps: 4 });
+    await page.mouse.move(to.x + to.width * 0.8, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const dragged = (await db()).vehicle_photos.sort((a, b) => a.position - b.position).map((p) => p.id);
+    assert(dragged[0] === 'p5' && dragged[1] === photos[2].id && dragged[2] === 'p0', 'dragged: ' + dragged.slice(0, 4).join());
+    assert(await page.locator('.photo-tile').first().locator('.cover').count() === 1, 'cover label follows the new first photo');
+    assert(!(await page.locator('.sort-ghost').count()), 'drag ghost cleaned up');
     await page.click('[data-del="p31"]');
     await page.waitForTimeout(200);
     assert((await db()).vehicle_photos.length === 31, 'deleted');
@@ -1533,6 +1547,31 @@ console.log('Photographer');
     assert(ups.slice(-4).every((u) => new RegExp(`^${D}/vehicles/${V}/[0-9a-f-]{36}\\.jpg$`).test(u.path)), JSON.stringify(ups.slice(-4).map((u) => u.path)));
   });
   await page.screenshot({ path: join(SHOTS, '17-photographer-phone.png'), fullPage: true });
+  await step('arrange on a phone: press and hold a photo, drag it down; a quick swipe does nothing', async () => {
+    const order = async () => (await db()).vehicle_photos.filter((p) => p.vehicle_id === V).sort((a, b) => a.position - b.position).map((p) => p.id);
+    const before = await order();
+    const touch = (id, steps, hold) => page.evaluate(async ({ id, steps, hold }) => {
+      const ol = document.querySelector('.shoot-arrange');
+      const img = ol.querySelector(`li[data-photo="${id}"] img`);
+      img.scrollIntoView({ block: 'center' });
+      const r = img.getBoundingClientRect();
+      const x = r.left + r.width / 2; let y = r.top + r.height / 2;
+      const fire = (type, el = document.elementFromPoint(x, y) || img) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: y }));
+      fire('pointerdown', img);
+      await new Promise((res) => setTimeout(res, hold));
+      for (const dy of steps) { y += dy; fire('pointermove', ol); await new Promise((res) => setTimeout(res, 16)); }
+      fire('pointerup', ol);
+    }, { id, steps, hold });
+    await touch(before[0], [5, 20, 20], 50); // a swipe: moved before the hold ended
+    await page.waitForTimeout(300);
+    assert((await order()).join() === before.join(), 'a quick swipe does not reorder');
+    const h = await page.locator(`.shoot-arrange li[data-photo="${before[0]}"]`).evaluate((el) => el.getBoundingClientRect().height);
+    await touch(before[0], Array(12).fill(h * 1.5 / 12), 400);
+    await page.waitForTimeout(400);
+    const after = await order();
+    assert(after[0] === before[1] && after[1] === before[0], 'held and dragged one place down: ' + after.slice(0, 3).join());
+    assert(await page.locator('.shoot-arrange li').first().locator('text=Cover').count() === 1, 'Cover label updated');
+  });
   await step('a dropped upload retries by itself; moving to the next car keeps photos with the right car', async () => {
     await page.evaluate((T) => {
       window.__DB.vehicles.push({ id: T, dealership_id: window.__DB.dealerships[0].id, slug: '2025-chevrolet-trax', status: 'draft', condition: 'used', stock_number: 'PJ17152',

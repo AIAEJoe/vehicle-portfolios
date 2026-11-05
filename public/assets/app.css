@@ -662,3 +662,10 @@ body.mv-open { overflow: hidden; }
 .cam:not(.rec) .cam-frame { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .5); }
 .rec.reviewing .cam-frame { display: none; }
 .rec .cam-bar:not(.rec-after) { gap: 10px; }
+
+/* drag-and-drop photo order (admin/drag-sort.js) */
+.photo-tile, .shoot-arrange li { touch-action: manipulation; }
+.photo-tile img, .shoot-arrange li img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: grab; }
+.sorting, .sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.sort-placeholder { opacity: .3; outline: 2px dashed var(--accent, #f5b301); outline-offset: -2px; }
+.sort-ghost { box-shadow: 0 12px 30px rgba(0,0,0,.28); transform: scale(1.04); opacity: .95; border-radius: 8px; background: #fff; list-style: none; }

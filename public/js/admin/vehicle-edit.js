@@ -12,6 +12,7 @@ import { stickerTab, stickerBadge } from './sticker-tab.js';
 import { programStatus } from '../warranty-program.js';
 import { auditPhotos, DEFAULT_PHOTO_MIN } from '../photo-audit.js';
 import { openMedia, MEDIA_LABEL } from '../media-viewers.js';
+import { makeSortable } from './drag-sort.js';
 
 const DOC_KINDS = [
   ['window_sticker', 'Window sticker'], ['history_report', 'Vehicle history report (Carfax / AutoCheck)'],
@@ -266,9 +267,10 @@ export default async function vehicleEdit(el, { id }) {
       <form id="by-url" class="copy-field" style="margin-bottom:14px">
         <input type="url" id="purl" placeholder="…or paste an image URL" aria-label="Image URL"><button class="btn alt">Add</button>
       </form>
-      ${list.length ? html`<div class="photo-grid">${list.map((p, i) => html`<div class="photo-tile">
+      ${list.length > 1 ? html`<p class="hint" style="margin:0 0 8px">Drag photos to change the order (on a phone, press and hold first). The first photo is the cover.</p>` : ''}
+      ${list.length ? html`<div class="photo-grid">${list.map((p, i) => html`<div class="photo-tile" data-photo="${p.id}">
         ${i === 0 ? html`<span class="cover">Cover</span>` : ''}
-        <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy">
+        <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy" draggable="false">
         <input class="photo-cap-input" data-cap="${p.id}" value="${p.caption || ''}" maxlength="200" placeholder="Caption" aria-label="Caption for photo ${i + 1}">
         <div class="bar">
           <span><button data-move="-1" data-id="${p.id}" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>◀</button><button data-move="1" data-id="${p.id}" aria-label="Move right" ${i === list.length - 1 ? 'disabled' : ''}>▶</button></span>
@@ -322,6 +324,9 @@ export default async function vehicleEdit(el, { id }) {
       v.vehicle_photos = updates;
       frame();
     }
+    const grid = $('.photo-grid', box);
+    if (grid && list.length > 1) makeSortable(grid, { item: '.photo-tile', idOf: (el) => el.dataset.photo,
+      onDrop: (ids) => saveOrder(ids.map((id) => list.find((p) => p.id === id)).filter(Boolean)) });
     on(box, 'click', '[data-move]', (e, b) => {
       const i = list.findIndex((p) => p.id === b.dataset.id);
       const j = i + Number(b.dataset.move);

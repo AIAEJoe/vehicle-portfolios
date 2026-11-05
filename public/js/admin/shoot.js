@@ -16,6 +16,7 @@ import { openCamera, cameraSupported } from './camera.js';
 import { savePending, removePending, listPending, saveToDevice } from './photo-store.js';
 import { auditPhotos, DEFAULT_PHOTO_MIN } from '../photo-audit.js';
 import { mediaSection } from './shoot-media.js';
+import { makeSortable } from './drag-sort.js';
 
 const RETRY_DELAYS = [2000, 6000, 15000, 30000];
 const CONCURRENCY = 2;
@@ -194,15 +195,17 @@ export default async function shoot(el, params, token = {}) {
   }
 
   // ---------- arrange: reorder, cover, caption, delete ----------
+  let unsort = null;
   function drawManage() {
     const box = $('#manage', main);
+    if (unsort) { unsort(); unsort = null; }
     if (!car || !box) return;
     const list = car.photos;
     if (!list.length) { mount(box, ''); return; }
     mount(box, html`<div class="card"><h2>Arrange ${list.length} photo${list.length === 1 ? '' : 's'}</h2>
-      <p class="hint" style="margin-top:0">This is the order customers see. Use the arrows to move a photo, ★ to make it the cover.</p>
+      <p class="hint" style="margin-top:0">This is the order customers see. Drag a photo to move it (on a phone, press and hold it first), or use the arrows. ★ makes it the cover.</p>
       <ol class="shoot-arrange">${list.map((p, i) => html`<li data-photo="${p.id}">
-        <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy">
+        <img src="${p.url}" alt="Photo ${i + 1}" loading="lazy" draggable="false">
         <div class="shoot-arrange-body">
           <div class="shoot-arrange-top"><b>${i === 0 ? 'Cover' : `#${i + 1}`}</b>${p.source !== 'upload' ? html`<span class="small sub"> ${p.source === 'feed' ? 'feed' : 'stock'} photo</span>` : ''}</div>
           <input class="shoot-caption" data-caption="${p.id}" value="${p.caption || ''}" maxlength="200" placeholder="Caption (optional)" aria-label="Caption for photo ${i + 1}">
@@ -213,6 +216,8 @@ export default async function shoot(el, params, token = {}) {
             <button type="button" data-del="${p.id}" aria-label="Delete photo ${i + 1}" class="del">🗑</button>
           </div>
         </div></li>`)}</ol></div>`);
+    unsort = makeSortable($('.shoot-arrange', box), { item: 'li[data-photo]', idOf: (el) => el.dataset.photo,
+      onDrop: (ids) => saveOrder(ids.map((id) => car.photos.find((p) => p.id === id)).filter(Boolean)) });
   }
   async function saveOrder(next) {
     const changed = next.map((p, i) => ({ p, i })).filter(({ p, i }) => p.position !== i);
